@@ -1,0 +1,29 @@
+# Node
+node_modules/
+.next/
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.env
+*.env
+
+# macOS
+.DS_Store
+
+# General
+*.log
+dist/
+build/
+.cache/
+*.sqlite3
+
+# VSCode
+.vscode/
+
+# Others
+*.swp
+*.bak
