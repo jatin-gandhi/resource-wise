@@ -4,24 +4,27 @@ This is the backend for the Resource Wise AI-powered resource allocation system.
 
 ## Getting Started
 
-1. (Recommended) Create a virtual environment:
+1. **Set up a Python virtual environment (recommended):**
    ```sh
-   python -m venv venv
-   source venv/bin/activate
+   python -m venv .venv
+   source .venv/bin/activate
    ```
-2. Install dependencies (skip for now):
+2. **Install Poetry (if not already installed):**
    ```sh
-   pip install -r requirements.txt
-   # or
+   curl -sSL https://install.python-poetry.org | python3 -
+   # or follow instructions at https://python-poetry.org/docs/#installation
+   ```
+3. **Install dependencies:**
+   ```sh
    poetry install
    ```
-3. Copy environment variables:
+4. **Copy environment variables:**
    ```sh
    cp .env.example .env
    ```
-4. Run the FastAPI server:
+5. **Run the FastAPI server:**
    ```sh
-   uvicorn main:app --reload
+   poetry run uvicorn main:app --reload
    ```
 
 ## Structure
