@@ -57,39 +57,42 @@ shared-config/   # Shared JSON data and OpenAPI spec
 
 ## Pre-commit Hooks (Formatting & Linting)
 
-This repo uses [pre-commit](https://pre-commit.com/) to enforce code formatting and linting for both backend (Python) and frontend (TypeScript/JavaScript).
+This repo uses [Husky](https://typicode.github.io/husky/#/) and [pre-commit](https://pre-commit.com/) to enforce code formatting and linting for both backend (Python) and frontend (TypeScript/JavaScript).
 
-### Setup
-
-1. **Install pre-commit** (if not already):
-   ```sh
-   pip install pre-commit
-   # or with Poetry (in backend):
-   poetry add --group dev pre-commit
-   ```
-2. **Install the git hooks:**
-   ```sh
-   pre-commit install
-   ```
-3. **Run all hooks manually (optional):**
-   ```sh
-   pre-commit run --all-files
-   ```
-
-### What runs on commit?
+### Tools Used
 - **Backend (Python):**
   - [Black](https://github.com/psf/black) (formatter)
   - [Flake8](https://github.com/pycqa/flake8) (linter)
+  - [isort](https://pycqa.github.io/isort/) (import sorter)
+  
 - **Frontend (TypeScript/JavaScript):**
   - [Prettier](https://prettier.io/) (formatter)
   - [ESLint](https://eslint.org/) (linter)
 
+### Setup
+
+### 1. Install Dependencies
+Run the following command to install required dependencies:
+```sh
+  npm install
+```
+
+### 2. Setup Husky (Git Hooks)
+To ensure hooks are executable, run:
+```sh
+  chmod +x .husky/pre-commit
+  chmod +x .husky/commit-msg
+```
+
+### What runs on commit?
+- **Backend (Python):**
+  - Black (formatter)
+  - Flake8 (linter)
+  - isort (import sorter)
+  
+- **Frontend (TypeScript/JavaScript):**
+  - Prettier (formatter)
+  - ESLint (linter)
+
 Prettier and ESLint will respect configuration files in the `frontend/` directory.
 
-## Contributing
-- Use [Conventional Commits](https://www.conventionalcommits.org/) for commit messages.
-- PRs and issues welcome!
-
----
-
-*This project is scaffolded for a hackathon and is intended for rapid prototyping and extension.*
