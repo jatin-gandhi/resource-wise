@@ -2,12 +2,12 @@
 
 import uuid
 
-from pgvector.sqlalchemy import Vector
-from sqlalchemy import UUID, Column, Date, Enum, ForeignKey, Index, Integer, String, Text
-from sqlalchemy.orm import relationship
-
 from app.models.base import BaseModel
 from app.models.enums import SkillProficiencyLevel, SkillSource
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import UUID, Column, Date, Enum, ForeignKey, Index, Integer, String, Text
+from sqlalchemy.dialects.postgresql import TSVECTOR
+from sqlalchemy.orm import relationship
 
 
 class EmployeeSkill(BaseModel):
@@ -27,11 +27,17 @@ class EmployeeSkill(BaseModel):
     # Skill rating (1-5 scale)
     proficiency_level = Column(Enum(SkillProficiencyLevel), default=SkillProficiencyLevel.BEGINNER)
 
+    # Full-text search vector (automatically maintained by trigger)
+    search_vector = Column(TSVECTOR)
+
     # Relationships
     employee = relationship("Employee", back_populates="skills")
 
     # Indexes for better performance
     __table_args__ = (
+        # GIN index for full-text search
+        Index("idx_employee_skill_search_vector", search_vector, postgresql_using="gin"),
+        # Existing indexes
         Index("idx_employee_skill_name", employee_id, skill_name),
         Index("idx_skill_proficiency", skill_name, proficiency_level),
     )
@@ -53,8 +59,33 @@ class EmployeeEmbedding(BaseModel):
     summary = Column(Text, nullable=False)  # The text that was embedded
     embedding = Column(Vector(1536))  # OpenAI ada-002 embedding dimension
 
+    # Full-text search vector for summary text
+    search_vector = Column(TSVECTOR)
+
     # Relationships
     employee = relationship("Employee", back_populates="embeddings")
+
+    # Indexes for vector similarity search and full-text search
+    __table_args__ = (
+        # GIN index for full-text search on summary
+        Index("idx_employee_embedding_search_vector", search_vector, postgresql_using="gin"),
+        # HNSW index for fast vector similarity search (cosine distance)
+        Index(
+            "idx_employee_embedding_cosine",
+            embedding,
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+        # IVFFlat index for vector similarity search (alternative)
+        Index(
+            "idx_employee_embedding_ivfflat",
+            embedding,
+            postgresql_using="ivfflat",
+            postgresql_with={"lists": 100},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
 
     def __repr__(self):
         return f"<EmployeeEmbedding(employee_id={self.employee_id}, source='{self.source}')>"

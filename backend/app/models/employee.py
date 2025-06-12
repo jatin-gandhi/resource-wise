@@ -2,10 +2,10 @@
 
 import uuid
 
-from sqlalchemy import UUID, Boolean, Column, Date, ForeignKey, Integer, String
-from sqlalchemy.orm import relationship
-
 from app.models.base import BaseModel
+from sqlalchemy import UUID, Boolean, Column, Date, ForeignKey, Index, Integer, String
+from sqlalchemy.dialects.postgresql import TSVECTOR
+from sqlalchemy.orm import relationship, validates
 
 
 class Employee(BaseModel):
@@ -21,8 +21,11 @@ class Employee(BaseModel):
         UUID(as_uuid=True), ForeignKey("designations.id"), nullable=False, index=True
     )
     capacity_percent = Column(Integer, default=100)  # e.g. 100, 70, 50
-    onboarded_at = Column(Date, nullable=False)
+    onboarded_at = Column(Date, nullable=True)  # Nullable for historical data flexibility
     is_active = Column(Boolean, default=True, index=True)
+
+    # Full-text search vector (automatically maintained by trigger)
+    search_vector = Column(TSVECTOR)
 
     # Relationships
     designation_ref = relationship("Designation", back_populates="employees")
@@ -32,6 +35,14 @@ class Employee(BaseModel):
     )
     allocations = relationship(
         "Allocation", back_populates="employee", cascade="all, delete-orphan"
+    )
+
+    # Indexes for better performance
+    __table_args__ = (
+        # GIN index for full-text search
+        Index("idx_employee_search_vector", search_vector, postgresql_using="gin"),
+        # Composite index for common queries
+        Index("idx_employee_active_designation", is_active, designation_id),
     )
 
     def __repr__(self):
@@ -46,3 +57,10 @@ class Employee(BaseModel):
     def designation_title(self) -> str | None:
         """Get designation title for easy access"""
         return self.designation_ref.title if self.designation_ref else None
+
+    @validates("email")
+    def normalize_email(self, key, value):
+        """Normalize email to lowercase and strip whitespace"""
+        if value:
+            return value.lower().strip()
+        return value
