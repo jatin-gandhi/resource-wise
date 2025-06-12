@@ -2,12 +2,11 @@
 
 import uuid
 
+from app.models.base import BaseModel
+from app.models.enums import ProjectStatus, ProjectType
 from sqlalchemy import ARRAY, UUID, Column, Enum, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import relationship
-
-from app.models.base import BaseModel
-from app.models.enums import ProjectStatus
 
 
 class Project(BaseModel):
@@ -21,6 +20,7 @@ class Project(BaseModel):
     description = Column(Text)
     duration_months = Column(Integer)
     tech_stack = Column(ARRAY(String), default=[])  # Array of technologies
+    project_type = Column(Enum(ProjectType), nullable=False, index=True)
     status = Column(Enum(ProjectStatus), default=ProjectStatus.PLANNING, index=True)
 
     # Requirements

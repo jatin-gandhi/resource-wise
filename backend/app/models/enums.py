@@ -3,6 +3,13 @@
 from enum import Enum
 
 
+class ProjectType(str, Enum):
+    """Project type enum"""
+
+    CUSTOMER = "customer"
+    INTERNAL = "internal"
+
+
 class ProjectStatus(str, Enum):
     """Project status enum"""
 

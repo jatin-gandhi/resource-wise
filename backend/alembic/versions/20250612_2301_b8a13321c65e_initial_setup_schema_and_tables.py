@@ -1,8 +1,8 @@
-"""initial setup
+"""initial setup - schema and tables
 
-Revision ID: 1fecf4fe661d
+Revision ID: b8a13321c65e
 Revises: 
-Create Date: 2025-06-12 21:47:15.088225
+Create Date: 2025-06-12 23:01:12.270623
 
 """
 from typing import Sequence, Union
@@ -13,7 +13,7 @@ import pgvector
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '1fecf4fe661d'
+revision: str = 'b8a13321c65e'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -88,6 +88,7 @@ def upgrade() -> None:
     sa.Column('description', sa.Text(), nullable=True),
     sa.Column('duration_months', sa.Integer(), nullable=True),
     sa.Column('tech_stack', sa.ARRAY(sa.String()), nullable=True),
+    sa.Column('project_type', sa.Enum('CUSTOMER', 'INTERNAL', name='projecttype'), nullable=False),
     sa.Column('status', sa.Enum('PLANNING', 'ACTIVE', 'ON_HOLD', 'COMPLETED', 'CANCELLED', name='projectstatus'), nullable=True),
     sa.Column('required_roles', sa.ARRAY(sa.String()), nullable=True),
     sa.Column('required_skills', sa.ARRAY(sa.String()), nullable=True),
@@ -111,6 +112,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_projects_deleted_at'), 'projects', ['deleted_at'], unique=False)
     op.create_index(op.f('ix_projects_deleted_by'), 'projects', ['deleted_by'], unique=False)
     op.create_index(op.f('ix_projects_name'), 'projects', ['name'], unique=False)
+    op.create_index(op.f('ix_projects_project_type'), 'projects', ['project_type'], unique=False)
     op.create_index(op.f('ix_projects_status'), 'projects', ['status'], unique=False)
     op.create_index(op.f('ix_projects_updated_by'), 'projects', ['updated_by'], unique=False)
     op.create_table('employees',
@@ -279,6 +281,7 @@ def downgrade() -> None:
     op.drop_table('employees')
     op.drop_index(op.f('ix_projects_updated_by'), table_name='projects')
     op.drop_index(op.f('ix_projects_status'), table_name='projects')
+    op.drop_index(op.f('ix_projects_project_type'), table_name='projects')
     op.drop_index(op.f('ix_projects_name'), table_name='projects')
     op.drop_index(op.f('ix_projects_deleted_by'), table_name='projects')
     op.drop_index(op.f('ix_projects_deleted_at'), table_name='projects')

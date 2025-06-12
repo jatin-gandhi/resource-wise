@@ -8,6 +8,7 @@ from app.models.enums import (
     AllocationPercentage,
     AllocationStatus,
     ProjectStatus,
+    ProjectType,
     SkillProficiencyLevel,
     SkillSource,
 )
@@ -26,6 +27,7 @@ __all__ = [
     "EmployeeEmbedding",
     # Enums
     "ProjectStatus",
+    "ProjectType",
     "AllocationStatus",
     "AllocationPercentage",
     "SkillProficiencyLevel",
