@@ -1,7 +1,7 @@
 # Node
 node_modules/
 .next/
-.env
+.env/
 .env.*
 
 # Python
@@ -9,7 +9,7 @@ __pycache__/
 *.py[cod]
 venv/
 .venv/
-.env
+.env/
 *.env
 
 # macOS
@@ -24,6 +24,8 @@ build/
 
 # VSCode
 .vscode/
+
+.idea/
 
 # Others
 *.swp
