@@ -2,10 +2,11 @@
 
 import uuid
 
-from app.models.base import BaseModel
 from sqlalchemy import UUID, Boolean, Column, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import relationship
+
+from app.models.base import BaseModel
 
 
 class Designation(BaseModel):

@@ -2,12 +2,13 @@
 
 import uuid
 
-from app.models.base import BaseModel
-from app.models.enums import SkillProficiencyLevel, SkillSource
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import UUID, Column, Date, Enum, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import relationship
+
+from app.models.base import BaseModel
+from app.models.enums import SkillProficiencyLevel, SkillSource
 
 
 class EmployeeSkill(BaseModel):

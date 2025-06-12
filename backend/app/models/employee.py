@@ -2,10 +2,11 @@
 
 import uuid
 
-from app.models.base import BaseModel
 from sqlalchemy import UUID, Boolean, Column, Date, ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import relationship, validates
+
+from app.models.base import BaseModel
 
 
 class Employee(BaseModel):

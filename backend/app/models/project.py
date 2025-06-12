@@ -2,11 +2,12 @@
 
 import uuid
 
-from app.models.base import BaseModel
-from app.models.enums import ProjectStatus
 from sqlalchemy import ARRAY, UUID, Column, Enum, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import relationship
+
+from app.models.base import BaseModel
+from app.models.enums import ProjectStatus
 
 
 class Project(BaseModel):

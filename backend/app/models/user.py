@@ -2,10 +2,11 @@
 
 import uuid
 
-from app.models.base import BaseModel
 from sqlalchemy import UUID, Boolean, Column, Index, String, Text
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import validates
+
+from app.models.base import BaseModel
 
 
 class User(BaseModel):
