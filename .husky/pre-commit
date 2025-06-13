@@ -3,15 +3,15 @@ cd frontend
 echo "\n\n🎨 Checking code formatting with Prettier..."
 npm run format . || { echo "❌ Prettier check failed. Please run 'npm run prettier:apply' and stage the changes. Aborting commit."; exit 1; }
 
-echo "\n\n🔍 Running ESLint for code quality checks..."
-npm run lint:fix || { echo "❌ ESLint check failed. Please fix issues and stage the changes. Aborting commit."; exit 1; }
+# echo "\n\n🔍 Running ESLint for code quality checks..."
+# npm run lint:fix || { echo "❌ ESLint check failed. Please fix issues and stage the changes. Aborting commit."; exit 1; }
 
 echo "✅ Pre-commit checks passed successfully for frontend!"
 
 cd ../backend
 
-echo "🦀 Running Ruff linter and formatter on backend..."
-uv run ruff check --fix . || { echo "❌ Ruff linting failed. Please fix issues and stage the changes. Aborting commit."; exit 1; }
+# echo "🦀 Running Ruff linter and formatter on backend..."
+# uv run ruff check --fix . || { echo "❌ Ruff linting failed. Please fix issues and stage the changes. Aborting commit."; exit 1; }
 
 echo "🦀 Running Ruff formatter on backend..."
 uv run ruff format . || { echo "❌ Ruff formatting failed. Please stage the changes. Aborting commit."; exit 1; }

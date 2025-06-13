@@ -16,7 +16,7 @@ structlog.configure(
         structlog.stdlib.filter_by_level,
         structlog.stdlib.add_log_level,
         structlog.processors.TimeStamper(fmt="%H:%M:%S"),
-        structlog.dev.ConsoleRenderer(colors=True)
+        structlog.dev.ConsoleRenderer(colors=True),
     ],
     context_class=dict,
     logger_factory=structlog.stdlib.LoggerFactory(),

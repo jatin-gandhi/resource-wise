@@ -20,10 +20,21 @@ dependencies = [
     "pgvector>=0.3.6",
     # AI & Embeddings
     "openai>=1.52.0",
-    "langchain>=0.1.0",
-    "langchain-core>=0.1.0",
-    "langchain-openai>=0.0.2",
-    "langgraph>=0.0.15",
+    # =============================================================================
+    # LANGCHAIN ECOSYSTEM - Latest Stable Versions (December 2024)
+    # =============================================================================
+    "langchain>=0.3.25",
+    "langchain-core>=0.3.27",
+    "langchain-openai>=0.2.10",
+    "langchain-community>=0.3.25",
+    "langgraph>=0.4.8",  # Latest stable for agent orchestration
+    "langsmith>=0.2.5",  # Latest for observability and tracing
+    
+    # Additional Multi-Agent Dependencies  
+    "rapidfuzz>=3.10.1",        # For fuzzy entity matching
+    "python-constraint>=1.4.0", # For allocation optimization
+    "redis>=5.2.1",             # For agent state caching
+    "tiktoken>=0.8.0",          # For token counting and optimization
     # HTTP Client (for OpenAI API calls)
     "httpx>=0.27.0",
     # Configuration & Environment
@@ -72,6 +83,11 @@ line-ending = "auto"
 [dependency-groups]
 dev = [
     "ruff>=0.11.13",
+    # Testing Framework
+    "pytest>=8.3.4",
+    "pytest-asyncio>=0.24.0",
+    "pytest-mock>=3.14.0",
+    "pytest-cov>=6.0.0",
 ]
 
 [tool.ruff.lint.isort]

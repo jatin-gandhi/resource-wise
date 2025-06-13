@@ -36,7 +36,8 @@ class Settings(BaseSettings):
 
     # CORS - Simple string that will be split on comma
     ALLOWED_ORIGINS: str = Field(
-        description="Allowed origins", default="http://localhost:3000,http://localhost:5173,http://localhost:8000"
+        description="Allowed origins",
+        default="http://localhost:3000,http://localhost:5173,http://localhost:8000",
     )
 
     @computed_field
