@@ -24,8 +24,7 @@ const Landing: React.FC = () => {
     <Box
       sx={{
         minHeight: '100vh',
-        background:
-          'linear-gradient(to bottom right, #0A014F, #060C44, #0A1144, #0D1543, #0C0E47, #16154C, #1F1C51, #292356, #1F1E4F, #151947)',
+        background: 'linear-gradient(180deg, #130738 0%, #000000 100%)',
         backgroundSize: '400% 400%',
         animation: `${gradientAnimation} 6s ease infinite`,
         display: 'flex',
