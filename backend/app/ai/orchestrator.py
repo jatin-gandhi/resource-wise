@@ -19,8 +19,15 @@ logger = structlog.get_logger()
 class AIOrchestrator:
     """Orchestrates the AI system components."""
 
-    def __init__(self, config: AIConfig):
-        """Initialize the orchestrator."""
+    def __init__(self, config: AIConfig | None = None):
+        """Initialize the orchestrator.
+
+        Args:
+            config: AI configuration settings. If None, will use default config with settings.
+        """
+        if config is None:
+            config = AIConfig()
+
         self.config = config
         self.llm_service = LLMService(config)
         self.workflow = AgentWorkflow(config)
@@ -56,7 +63,7 @@ class AIOrchestrator:
 
             # Get LLM response
             response_content = await self.llm_service.get_completion(user_message=query)
-            
+
             # Add assistant response to history
             self.context_service.add_to_history(
                 session_id=session_id, message={"role": "assistant", "content": response_content}
@@ -77,7 +84,7 @@ class AIOrchestrator:
     ) -> AsyncGenerator[str]:
         """Process a query with streaming response."""
         accumulated_content = ""
-        
+
         try:
             # Generate session ID if not provided
             session_id = session_id or str(uuid4())
@@ -107,7 +114,7 @@ class AIOrchestrator:
                         accumulated_content += token
                 except:
                     pass  # Ignore parsing errors for logging
-                
+
                 yield chunk
 
             # Add final response to history
