@@ -10,18 +10,13 @@ from app.core.config import settings
 from app.core.database import create_tables
 from app.routers import ai, allocations, chat, employees, health, projects
 
-# Configure structured logging
+# Configure structured logging for readable console output
 structlog.configure(
     processors=[
         structlog.stdlib.filter_by_level,
-        structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
-        structlog.stdlib.PositionalArgumentsFormatter(),
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.StackInfoRenderer(),
-        structlog.processors.format_exc_info,
-        structlog.processors.UnicodeDecoder(),
-        structlog.processors.JSONRenderer(),
+        structlog.processors.TimeStamper(fmt="%H:%M:%S"),
+        structlog.dev.ConsoleRenderer(colors=True)
     ],
     context_class=dict,
     logger_factory=structlog.stdlib.LoggerFactory(),

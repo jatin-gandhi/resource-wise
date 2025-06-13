@@ -1,8 +1,10 @@
 """AI router implementation."""
 
+import time
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+import structlog
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from app.ai.core.config import AIConfig
@@ -10,6 +12,7 @@ from app.ai.orchestrator import AIOrchestrator
 from app.schemas.ai import QueryRequest, QueryResponse
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+logger = structlog.get_logger()
 
 
 def get_orchestrator() -> AIOrchestrator:
@@ -17,54 +20,116 @@ def get_orchestrator() -> AIOrchestrator:
     return AIOrchestrator(config=AIConfig())
 
 
+@router.get("/health")
+async def health_check(
+    request: Request,
+    orchestrator: AIOrchestrator = Depends(get_orchestrator)
+):
+    """Check AI service health and OpenAI configuration."""
+    start_time = time.time()
+    
+    logger.info("@/health")
+    
+    try:
+        openai_configured = orchestrator.llm_service.client is not None
+        status = "healthy" if openai_configured else "degraded"
+        message = "AI service is running" if openai_configured else "OpenAI API key not configured"
+        
+        response = {
+            "status": status,
+            "openai_configured": openai_configured,
+            "message": message
+        }
+        
+        processing_time = round((time.time() - start_time) * 1000, 1)
+        logger.info(f"@/health ✓ {processing_time}ms")
+        
+        return response
+        
+    except Exception as e:
+        processing_time = round((time.time() - start_time) * 1000, 1)
+        logger.error(f"@/health ✗ {processing_time}ms - {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Health check failed: {str(e)}") from e
+
+
 @router.post("/query", response_model=QueryResponse)
 async def process_query(
     request: QueryRequest,
+    http_request: Request,
     orchestrator: AIOrchestrator = Depends(get_orchestrator),
 ) -> dict[str, Any]:
-    """Process a query.
+    """Process a query using AI orchestrator."""
+    start_time = time.time()
 
-    Args:
-        request: Query request
-        orchestrator: AI orchestrator instance
+    logger.info(f"@/query [{request.session_id or 'new'}] {len(request.query)}chars")
 
-    Returns:
-        Query response
-    """
     try:
-        return await orchestrator.process_query(
+        result = await orchestrator.process_query(
             query=request.query,
             session_id=request.session_id,
             user_id=request.user_id,
             metadata=request.metadata,
         )
+        
+        processing_time = round((time.time() - start_time) * 1000, 1)
+        response_len = len(str(result.get("result", {}).get("content", "")))
+        has_error = "✗" if result.get("error") else "✓"
+        
+        logger.info(f"@/query {has_error} {processing_time}ms → {response_len}chars")
+        
+        return result
+        
     except Exception as e:
+        processing_time = round((time.time() - start_time) * 1000, 1)
+        logger.error(f"@/query ✗ {processing_time}ms - {str(e)}")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/stream")
 async def stream_query(
     request: QueryRequest,
+    http_request: Request,
     orchestrator: AIOrchestrator = Depends(get_orchestrator),
 ) -> StreamingResponse:
-    """Stream query processing.
-
-    Args:
-        request: Query request
-        orchestrator: AI orchestrator instance
-
-    Returns:
-        Streaming response
-    """
+    """Stream query processing using AI orchestrator."""
+    start_time = time.time()
+    
+    logger.info(f"@/stream [{request.session_id or 'new'}] {len(request.query)}chars")
+    
     try:
-        return StreamingResponse(
-            orchestrator.stream_query(
+        # Create a wrapper generator to log streaming completion
+        async def logged_stream_generator():
+            token_count = 0
+            try:
+                async for chunk in orchestrator.stream_query(
                 query=request.query,
                 session_id=request.session_id,
                 user_id=request.user_id,
                 metadata=request.metadata,
-            ),
+                ):
+                    token_count += 1
+                    yield chunk
+                
+                processing_time = round((time.time() - start_time) * 1000, 1)
+                logger.info(f"@/stream ✓ {processing_time}ms → {token_count} tokens")
+                
+            except Exception as e:
+                processing_time = round((time.time() - start_time) * 1000, 1)
+                logger.error(f"@/stream ✗ {processing_time}ms - {str(e)}")
+                raise
+        
+        return StreamingResponse(
+            logged_stream_generator(),
             media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "*",
+            }
         )
+        
     except Exception as e:
+        processing_time = round((time.time() - start_time) * 1000, 1)
+        logger.error(f"@/stream ✗ {processing_time}ms - {str(e)}")
         raise HTTPException(status_code=500, detail=str(e)) from e
