@@ -52,25 +52,39 @@ def upgrade() -> None:
     op.create_index(op.f('ix_users_is_active'), 'users', ['is_active'], unique=False)
     op.create_index(op.f('ix_users_updated_by'), 'users', ['updated_by'], unique=False)
     op.create_index(op.f('ix_users_username'), 'users', ['username'], unique=True)
-    op.create_table('designations',
-    sa.Column('id', sa.UUID(), nullable=False),
-    sa.Column('code', sa.String(length=20), nullable=False),
-    sa.Column('title', sa.String(length=100), nullable=False),
-    sa.Column('description', sa.Text(), nullable=True),
-    sa.Column('level', sa.Integer(), nullable=False),
-    sa.Column('is_leadership', sa.Boolean(), nullable=True),
-    sa.Column('is_active', sa.Boolean(), nullable=True),
-    sa.Column('search_vector', postgresql.TSVECTOR(), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('deleted_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('created_by', sa.UUID(), nullable=True),
-    sa.Column('updated_by', sa.UUID(), nullable=True),
-    sa.Column('deleted_by', sa.UUID(), nullable=True),
-    sa.ForeignKeyConstraint(['created_by'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['deleted_by'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['updated_by'], ['users.id'], ),
-    sa.PrimaryKeyConstraint('id')
+    op.create_table(
+        "designations",
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("code", sa.String(length=20), nullable=False),
+        sa.Column("title", sa.String(length=100), nullable=False),
+        sa.Column("level", sa.Integer(), nullable=False),
+        sa.Column("is_leadership", sa.Boolean(), nullable=True),
+        sa.Column("is_active", sa.Boolean(), nullable=True),
+        sa.Column("search_vector", postgresql.TSVECTOR(), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_by", sa.UUID(), nullable=True),
+        sa.Column("updated_by", sa.UUID(), nullable=True),
+        sa.Column("deleted_by", sa.UUID(), nullable=True),
+        sa.ForeignKeyConstraint(
+            ["created_by"],
+            ["users.id"],
+        ),
+        sa.ForeignKeyConstraint(
+            ["deleted_by"],
+            ["users.id"],
+        ),
+        sa.ForeignKeyConstraint(
+            ["updated_by"],
+            ["users.id"],
+        ),
+        sa.PrimaryKeyConstraint("id"),
     )
     op.create_index('idx_designation_active_level', 'designations', ['is_active', 'level'], unique=False)
     op.create_index('idx_designation_leadership_level', 'designations', ['is_leadership', 'level'], unique=False)
@@ -146,27 +160,52 @@ def upgrade() -> None:
     op.create_index(op.f('ix_employees_is_active'), 'employees', ['is_active'], unique=False)
     op.create_index(op.f('ix_employees_name'), 'employees', ['name'], unique=False)
     op.create_index(op.f('ix_employees_updated_by'), 'employees', ['updated_by'], unique=False)
-    op.create_table('allocations',
-    sa.Column('id', sa.UUID(), nullable=False),
-    sa.Column('project_id', sa.UUID(), nullable=False),
-    sa.Column('employee_id', sa.UUID(), nullable=False),
-    sa.Column('percent_allocated', sa.Enum('QUARTER', 'HALF', 'THREE_QUARTER', 'FULL', name='allocationpercentage'), nullable=False),
-    sa.Column('start_date', sa.Date(), nullable=False),
-    sa.Column('end_date', sa.Date(), nullable=False),
-    sa.Column('status', sa.Enum('ACTIVE', 'COMPLETED', 'CANCELLED', name='allocationstatus'), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('deleted_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('created_by', sa.UUID(), nullable=True),
-    sa.Column('updated_by', sa.UUID(), nullable=True),
-    sa.Column('deleted_by', sa.UUID(), nullable=True),
-    sa.ForeignKeyConstraint(['created_by'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['deleted_by'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['employee_id'], ['employees.id'], ),
-    sa.ForeignKeyConstraint(['project_id'], ['projects.id'], ),
-    sa.ForeignKeyConstraint(['updated_by'], ['users.id'], ),
-    sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('project_id', 'employee_id', 'start_date', name='unique_allocation')
+    op.create_table(
+        "allocations",
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("project_id", sa.UUID(), nullable=False),
+        sa.Column("employee_id", sa.UUID(), nullable=False),
+        sa.Column("percent_allocated", sa.Integer(), nullable=False),
+        sa.Column("start_date", sa.Date(), nullable=False),
+        sa.Column("end_date", sa.Date(), nullable=False),
+        sa.Column(
+            "status",
+            sa.Enum("ACTIVE", "COMPLETED", "CANCELLED", name="allocationstatus"),
+            nullable=True,
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_by", sa.UUID(), nullable=True),
+        sa.Column("updated_by", sa.UUID(), nullable=True),
+        sa.Column("deleted_by", sa.UUID(), nullable=True),
+        sa.ForeignKeyConstraint(
+            ["created_by"],
+            ["users.id"],
+        ),
+        sa.ForeignKeyConstraint(
+            ["deleted_by"],
+            ["users.id"],
+        ),
+        sa.ForeignKeyConstraint(
+            ["employee_id"],
+            ["employees.id"],
+        ),
+        sa.ForeignKeyConstraint(
+            ["project_id"],
+            ["projects.id"],
+        ),
+        sa.ForeignKeyConstraint(
+            ["updated_by"],
+            ["users.id"],
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("project_id", "employee_id", "start_date", name="unique_allocation"),
     )
     op.create_index(op.f('ix_allocations_created_by'), 'allocations', ['created_by'], unique=False)
     op.create_index(op.f('ix_allocations_deleted_at'), 'allocations', ['deleted_at'], unique=False)

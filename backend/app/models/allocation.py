@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import UUID, Column, Date, Enum, ForeignKey, UniqueConstraint
+from sqlalchemy import UUID, Column, Date, Enum, ForeignKey, Integer, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.models.base import BaseModel
@@ -18,9 +18,7 @@ class Allocation(BaseModel):
 
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False, index=True)
     employee_id = Column(UUID(as_uuid=True), ForeignKey("employees.id"), nullable=False, index=True)
-    percent_allocated = Column(
-        Enum(AllocationPercentage), default=AllocationPercentage.FULL, nullable=False
-    )
+    percent_allocated = Column(Integer, default=AllocationPercentage.FULL.value, nullable=False)
     start_date = Column(Date, nullable=False, index=True)
     end_date = Column(Date, nullable=False, index=True)
 

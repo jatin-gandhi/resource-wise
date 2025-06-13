@@ -44,8 +44,7 @@ def upgrade() -> None:
         BEGIN
             NEW.search_vector := to_tsvector('english', 
                 COALESCE(NEW.code, '') || ' ' ||
-                COALESCE(NEW.title, '') || ' ' ||
-                COALESCE(NEW.description, '')
+                COALESCE(NEW.title, '')
             );
             RETURN NEW;
         END;

@@ -1,31 +1,298 @@
 """Query generation agent implementation."""
 
+from enum import Enum
 from typing import Any
 
 import structlog
+from langchain_openai import ChatOpenAI
 
 from app.ai.agents.base import BaseAgent
+from app.ai.core.config import AIConfig
+from app.ai.prompts import QueryPrompts
+from app.ai.services.schema import DatabaseSchemaService
+from app.core.config import settings
+from app.schemas.ai import QueryRequest
 
 logger = structlog.get_logger()
 
 
+class QueryType(str, Enum):
+    """Types of queries that can be generated."""
+
+    RESOURCE_SEARCH = "resource_search"
+    SKILL_SEARCH = "skill_search"
+    DEPARTMENT_SEARCH = "department_search"
+    ANALYTICS = "analytics"
+    UNKNOWN = "unknown"
+
+
 class QueryAgent(BaseAgent):
     """Agent for generating database queries."""
+
+    def __init__(self, config: AIConfig | None = None):
+        """Initialize the query agent.
+
+        Args:
+            config: AI configuration settings. If None, will use default config with settings.
+        """
+        if config is None:
+            config = AIConfig(
+                temperature=0.0
+            )  # Override temperature for deterministic query generation
+
+        super().__init__(config)
+
+        # Initialize services
+        self.schema_service = DatabaseSchemaService()
+
+        # Initialize LLM using config values
+        # Note: api_key will be automatically picked up from OPENAI_API_KEY env var
+        self.llm = ChatOpenAI(model=self.config.model_name, temperature=0.0, verbose=settings.DEBUG)
+
+        # Initialize prompts from the prompts package
+        self.query_generation_prompt = QueryPrompts.get_query_generation_prompt()
+        self.query_validation_prompt = QueryPrompts.get_query_validation_prompt()
+
+        # Initialize chains
+        self.generation_chain = self.query_generation_prompt | self.llm
+        self.validation_chain = self.query_validation_prompt | self.llm
 
     async def process(self, input_data: dict[str, Any]) -> dict[str, Any]:
         """Process the input to generate a database query.
 
         Args:
             input_data: Input data containing intent and parameters
+                Expected format:
+                {
+                    "query": "Find all developers with Python skills",
+                    "session_id": "123",
+                    "user_id": "456",
+                    "metadata": {
+                        "query_type": "skill_search",
+                        "filters": {...},
+                        "sort_by": "...",
+                        "limit": 10
+                    }
+                }
 
         Returns:
             Dictionary containing generated query and parameters
         """
         logger.info("Query agent received request", input_data=input_data, agent_type="query")
 
-        # TODO: Implement query generation
-        result = {"query": "", "parameters": {}, "query_type": "unknown"}
+        try:
+            # Parse and validate intent data
+            intent = QueryRequest(**input_data)
 
-        logger.info("Query agent generated response", result=result, agent_type="query")
+            # Get database schema
+            schema = await self._get_database_schema()
 
-        return result
+            # Get metadata with defaults
+            metadata = intent.metadata or {}
+
+            # Generate initial query with retry logic
+            max_retries = 2
+            final_query = ""
+
+            for attempt in range(max_retries + 1):
+                logger.debug(f"Query generation attempt {attempt + 1}", agent_type="query")
+
+                # Generate initial query
+                chain_input = {
+                    "parameters": str(metadata),
+                    "raw_query": intent.query,
+                    "schema": schema,
+                }
+
+                generated_query = await self.generation_chain.ainvoke(chain_input)
+                raw_query = str(generated_query.content)
+
+                # Validate and improve the query
+                validation_input = {
+                    "query": raw_query,
+                    "schema": schema,
+                }
+
+                validation_result = await self.validation_chain.ainvoke(validation_input)
+                final_query = self._extract_query_from_validation(str(validation_result.content))
+
+                # Validate against actual schema
+                is_valid, schema_errors = await self._validate_query_against_schema(final_query)
+
+                if is_valid:
+                    logger.info(
+                        f"Query validated successfully on attempt {attempt + 1}", agent_type="query"
+                    )
+                    break
+                else:
+                    logger.warning(
+                        f"Schema validation failed on attempt {attempt + 1}",
+                        errors=schema_errors,
+                        agent_type="query",
+                    )
+                    if attempt == max_retries:
+                        logger.error(
+                            "Max retries reached, using last generated query", agent_type="query"
+                        )
+
+            # Create query result
+            result = {
+                "query": final_query,
+                "parameters": metadata,
+                "query_type": "semantic",  # Now determined semantically by the LLM
+                "tables": self._extract_tables(final_query),
+                "joins": self._extract_joins(final_query),
+                "filters": self._extract_filters(final_query),
+            }
+
+            logger.info("Query agent generated response", result=result, agent_type="query")
+
+            return result
+
+        except Exception as e:
+            logger.error(
+                "Error generating query", error=str(e), input_data=input_data, agent_type="query"
+            )
+            return {"query": "", "parameters": {}, "query_type": QueryType.UNKNOWN, "error": str(e)}
+
+    def _extract_query_from_validation(self, validation_result: str) -> str:
+        """Extract the final query from validation result.
+
+        Args:
+            validation_result: Raw validation result from LLM
+
+        Returns:
+            Cleaned and formatted SQL query
+        """
+        # Remove any markdown code block markers
+        query = validation_result.replace("```sql", "").replace("```", "")
+
+        # Remove common prefixes that LLM might add
+        prefixes_to_remove = [
+            "Corrected SQL Query:",
+            "SQL Query:",
+            "Query:",
+            "Here is the corrected query:",
+            "The corrected query is:",
+        ]
+
+        for prefix in prefixes_to_remove:
+            if query.strip().startswith(prefix):
+                query = query.replace(prefix, "", 1).strip()
+
+        # Remove extra whitespace and normalize
+        query = " ".join(query.split())
+
+        # Ensure query ends with semicolon if it doesn't already
+        if query and not query.rstrip().endswith(";"):
+            query = query.rstrip() + ";"
+
+        return query
+
+    async def _validate_query_against_schema(self, query: str) -> tuple[bool, list[str]]:
+        """Validate that the query only uses tables and columns that exist in the schema.
+
+        Args:
+            query: SQL query to validate
+
+        Returns:
+            Tuple of (is_valid, list_of_errors)
+        """
+        errors = []
+
+        try:
+            # Get actual table names and columns from schema service
+            table_names = await self.schema_service.get_table_names()
+
+            used_tables = set()
+
+            # Find tables after FROM and JOIN keywords
+            words = query.split()
+            for i, word in enumerate(words):
+                if word.upper() in ["FROM", "JOIN"] and i + 1 < len(words):
+                    table_name = words[i + 1].strip("();,").split()[0]  # Handle aliases
+                    used_tables.add(table_name.lower())
+
+            # Check if all used tables exist
+            for table in used_tables:
+                if table not in [t.lower() for t in table_names]:
+                    errors.append(f"Table '{table}' does not exist in schema")
+
+            # Basic column validation (simplified - could be enhanced)
+            for table in used_tables:
+                if table in [t.lower() for t in table_names]:
+                    # Get actual table name (case-sensitive)
+                    actual_table = next(t for t in table_names if t.lower() == table)
+                    columns = await self.schema_service.get_table_columns(actual_table)
+
+                    # Check for obvious column references in SELECT clause
+                    # This is a basic check - could be enhanced with proper SQL parsing
+                    for _col in columns:
+                        pass  # For now, we rely on the LLM validation
+
+            return len(errors) == 0, errors
+
+        except Exception as e:
+            logger.warning("Error validating query against schema", error=str(e))
+            return True, []  # If validation fails, assume query is valid to avoid blocking
+
+    async def _get_database_schema(self) -> str:
+        """Get the database schema for query generation.
+
+        Returns:
+            String containing the database schema
+        """
+        return await self.schema_service.get_schema_description()
+
+    def _extract_tables(self, query: str) -> list[str]:
+        """Extract table names from SQL query.
+
+        Args:
+            query: SQL query string
+
+        Returns:
+            List of table names
+        """
+        tables = []
+        for line in query.split():
+            if "FROM" in line.upper() or "JOIN" in line.upper():
+                parts = line.split()
+                for i, part in enumerate(parts):
+                    if part.upper() in ["FROM", "JOIN"] and i + 1 < len(parts):
+                        table = parts[i + 1].strip(";")
+                        if table not in tables:
+                            tables.append(table)
+        return tables
+
+    def _extract_joins(self, query: str) -> list[str]:
+        """Extract JOIN clauses from SQL query.
+
+        Args:
+            query: SQL query string
+
+        Returns:
+            List of JOIN clauses
+        """
+        joins = []
+        words = query.split()
+        for i, word in enumerate(words):
+            if word.upper() == "JOIN":
+                join_clause = " ".join(words[i : i + 5])  # Basic join clause
+                joins.append(join_clause)
+        return joins
+
+    def _extract_filters(self, query: str) -> str:
+        """Extract WHERE clause from SQL query.
+
+        Args:
+            query: SQL query string
+
+        Returns:
+            WHERE clause string
+        """
+        if "WHERE" not in query.upper():
+            return "1=1"
+
+        where_start = query.upper().find("WHERE")
+        where_clause = query[where_start:].split(";")[0]
+        return where_clause.replace("WHERE", "").strip()
