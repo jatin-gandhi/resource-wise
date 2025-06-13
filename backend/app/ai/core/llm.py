@@ -67,7 +67,7 @@ Respond for this message from the user: {user_message}"""
                 ],
                 stream=True,
                 temperature=self.config.temperature,
-                max_tokens=1000,
+                # max_tokens=1000,
             )
 
             logger.info("openai streaming started")
@@ -117,7 +117,7 @@ Respond for this message from the user: {user_message}"""
                     {"role": "user", "content": prompt}
                 ],
                 temperature=self.config.temperature,
-                max_tokens=1000,
+                # max_tokens=1000,
             )
 
             content = response.choices[0].message.content or ""
