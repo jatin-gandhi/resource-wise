@@ -15,8 +15,8 @@ class Settings(BaseSettings):
     # Database Configuration - Individual Fields
     DB_HOST: str = Field(description="Database host", default="localhost")
     DB_PORT: int = Field(description="Database port", default=5432)
-    DB_USER: str = Field(description="Database user", default="postgres")
-    DB_PASSWORD: str = Field(description="Database password", default="password")
+    DB_USER: str = Field(description="Database user", default="admin")
+    DB_PASSWORD: str = Field(description="Database password", default="admin")
     DB_NAME: str = Field(description="Database name", default="resourcewise")
     DB_DRIVER: str = Field(description="Database driver", default="postgresql+asyncpg")
     DATABASE_ECHO: bool = Field(description="Database echo", default=False)

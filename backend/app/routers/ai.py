@@ -7,7 +7,6 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from app.ai.core.config import AIConfig
 from app.ai.orchestrator import AIOrchestrator
 from app.schemas.ai import QueryRequest, QueryResponse
 
@@ -17,7 +16,7 @@ logger = structlog.get_logger()
 
 def get_orchestrator() -> AIOrchestrator:
     """Get AI orchestrator instance."""
-    return AIOrchestrator(config=AIConfig())
+    return AIOrchestrator()  # AIConfig will automatically use settings
 
 
 @router.get("/health")

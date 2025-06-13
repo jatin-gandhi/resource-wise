@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import UUID, Boolean, Column, Index, Integer, String, Text
+from sqlalchemy import UUID, Boolean, Column, Index, Integer, String
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import relationship
 
@@ -19,7 +19,6 @@ class Designation(BaseModel):
     # Basic designation info
     code = Column(String(20), unique=True, nullable=False, index=True)  # TL, SSE, SD
     title = Column(String(100), nullable=False)  # Team Lead, Senior Software Engineer
-    description = Column(Text)  # Role description
 
     # Hierarchy and organizational info
     level = Column(Integer, nullable=False, index=True)  # 1=Junior, 5=Senior

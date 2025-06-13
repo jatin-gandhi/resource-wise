@@ -38,24 +38,24 @@ def upgrade() -> None:
     # Insert designations with DateTime audit fields
     designations_data = [
         # Interns (Level 0)
-        ("SDE_INTERN", "SDE Intern", "Software Development Engineer Intern", 0, False),
-        ("QA_INTERN", "QA Intern", "Quality Assurance Intern", 0, False),
+        ("SDE_INTERN", "Software Development Engineer Intern", "SDE Intern", 0, False),
+        ("QA_INTERN", "Quality Assurance Intern", "QA Intern", 0, False),
         # Junior (Level 1-2)
-        ("SDE", "SDE", "Software Development Engineer", 1, False),
-        ("SE", "SE", "Software Engineer", 2, False),
-        ("QA", "QA", "Quality Assurance Engineer", 1, False),
+        ("SDE", "Software Development Engineer", "SDE", 1, False),
+        ("SE", "Software Engineer", "SE", 2, False),
+        ("QA", "Quality Assurance Engineer", "QA", 1, False),
         # Mid-level (Level 3-4)
-        ("SSE", "SSE", "Senior Software Engineer", 3, False),
-        ("SR_QA", "Sr. QA", "Senior Quality Assurance Engineer", 4, False),
-        ("BA", "BA", "Business Analyst", 2, False),
-        ("UX", "UX Designer", "User Experience Designer", 2, False),
+        ("SSE", "Senior Software Engineer", "SSE", 3, False),
+        ("SR_QA", "Senior Quality Assurance Engineer", "Sr. QA", 4, False),
+        ("BA", "Business Analyst", "BA", 2, False),
+        ("UX", "UX Designer", "UX", 2, False),
         # Senior (Level 5-6)
-        ("TL", "TL", "Technical Lead", 5, True),
-        ("PM", "PM", "Project Manager", 4, True),
-        ("ARCH", "Architect", "Software Architect", 6, True),
+        ("TL", "Technical Lead", "TL", 5, True),
+        ("PM", "Project Manager", "PM", 4, True),
+        ("ARCH", "Software Architect", "Architect", 6, True),
         # Principal+ (Level 7+)
-        ("PE", "Principal Engineer", "Principal Software Engineer", 8, True),
-        ("TDO", "TDO", "Technical Delivery Officer", 10, True),
+        ("PE", "Principal Software Engineer", "Principal Engineer", 8, True),
+        ("TDO", "Technical Delivery Officer", "TDO", 10, True),
     ]
 
     designation_ids = {}
@@ -64,9 +64,9 @@ def upgrade() -> None:
         designation_ids[code] = designation_id
         op.execute(
             f"""
-            INSERT INTO designations (id, code, title, description, level, is_leadership, is_active,
+            INSERT INTO designations (id, code, title, level, is_leadership, is_active,
                                     created_at, updated_at, created_by, updated_by)
-            VALUES ('{designation_id}', '{code}', '{title}', '{desc}', {level}, {is_leadership}, true,
+            VALUES ('{designation_id}', '{code}', '{title}', {level}, {is_leadership}, true,
                     NOW(), NOW(), '{system_user_id}', '{system_user_id}');
         """
         )
@@ -563,16 +563,12 @@ def upgrade() -> None:
             if percent_allocated == 0:
                 continue
 
-            # Map integer percentages to enum values
-            percent_enum_map = {25: "QUARTER", 50: "HALF", 75: "THREE_QUARTER", 100: "FULL"}
-            percent_enum = percent_enum_map[percent_allocated]
-
             allocation_id = uuid.uuid4()
             op.execute(
                 f"""
                 INSERT INTO allocations (id, project_id, employee_id, percent_allocated, start_date, end_date, status,
                                        created_at, updated_at, created_by, updated_by)
-                VALUES ('{allocation_id}', '{project_id}', '{employee_id}', '{percent_enum}', 
+                VALUES ('{allocation_id}', '{project_id}', '{employee_id}', '{percent_allocated}', 
                         '{start_date}', '{end_date}', 'ACTIVE',
                         NOW(), NOW(), '{system_user_id}', '{system_user_id}');
             """
@@ -638,15 +634,12 @@ def upgrade() -> None:
             else:
                 percent_allocated = random.choice([25, 50, 75])
 
-            percent_enum_map = {25: "QUARTER", 50: "HALF", 75: "THREE_QUARTER", 100: "FULL"}
-            percent_enum = percent_enum_map[percent_allocated]
-
             allocation_id = uuid.uuid4()
             op.execute(
                 f"""
                 INSERT INTO allocations (id, project_id, employee_id, percent_allocated, start_date, end_date, status,
                                        created_at, updated_at, created_by, updated_by)
-                VALUES ('{allocation_id}', '{project_id}', '{employee_id}', '{percent_enum}', 
+                VALUES ('{allocation_id}', '{project_id}', '{employee_id}', '{percent_allocated}', 
                         '{start_date}', '{end_date}', 'COMPLETED',
                         NOW(), NOW(), '{system_user_id}', '{system_user_id}');
             """
