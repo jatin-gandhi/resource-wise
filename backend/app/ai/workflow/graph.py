@@ -62,7 +62,7 @@ class AgentWorkflow:
                 END: END
             }
         )
-        
+
         # Database workflow: Query -> Execute -> Format -> End
         workflow.add_edge("query_generation", "database_execution")
         workflow.add_edge("database_execution", "response_formatting")
@@ -84,8 +84,8 @@ class AgentWorkflow:
         """
         try:
             logger.info(
-                "Starting intent classification", 
-                user_input=state["user_input"], 
+                "Starting intent classification",
+                user_input=state["user_input"],
                 session_id=state["session_id"]
             )
 
@@ -108,7 +108,7 @@ class AgentWorkflow:
             state["query_result"] = result
 
             logger.info(
-                "Intent classification completed", 
+                "Intent classification completed",
                 intent=result.get("intent"),
                 requires_database=result.get("requires_database", False),
                 session_id=state["session_id"]
@@ -125,7 +125,7 @@ class AgentWorkflow:
                 session_id=state["session_id"],
                 exc_info=True,
             )
-            
+
             # Set error state
             state["current_stage"] = "error"
             state["error"] = str(e)
@@ -149,8 +149,8 @@ class AgentWorkflow:
         """
         try:
             logger.info(
-                "Starting query generation", 
-                user_input=state["user_input"], 
+                "Starting query generation",
+                user_input=state["user_input"],
                 session_id=state["session_id"]
             )
 
@@ -187,7 +187,7 @@ class AgentWorkflow:
                 ]
                 if query_result.get("parameters"):
                     response_parts.append(f"\nQuery Parameters: {query_result['parameters']}")
-                
+
                 final_result["response"] = "\n".join(response_parts).strip()
 
             # Update state with combined results
@@ -195,7 +195,7 @@ class AgentWorkflow:
             state["query_result"] = final_result
 
             logger.info(
-                "Query generation completed", 
+                "Query generation completed",
                 has_sql_query=bool(query_result.get("query")),
                 tables_used=query_result.get("tables", []),
                 session_id=state["session_id"]
@@ -212,7 +212,7 @@ class AgentWorkflow:
                 session_id=state["session_id"],
                 exc_info=True,
             )
-            
+
             # Preserve intent result but add error info
             if state["query_result"]:
                 state["query_result"].update({
@@ -226,7 +226,7 @@ class AgentWorkflow:
                     "error": str(e),
                     "requires_database": True
                 }
-            
+
             state["current_stage"] = "completed_with_error"
             state["error"] = str(e)
 
@@ -243,8 +243,8 @@ class AgentWorkflow:
         """
         try:
             logger.info(
-                "Starting database execution", 
-                user_input=state["user_input"], 
+                "Starting database execution",
+                user_input=state["user_input"],
                 session_id=state["session_id"]
             )
 
@@ -266,7 +266,7 @@ class AgentWorkflow:
             state["current_stage"] = "database_executed"
 
             logger.info(
-                "Database execution completed", 
+                "Database execution completed",
                 success=db_result.get("success", False),
                 row_count=db_result.get("row_count", 0),
                 execution_time=db_result.get("execution_time", 0),
@@ -284,7 +284,7 @@ class AgentWorkflow:
                 session_id=state["session_id"],
                 exc_info=True,
             )
-            
+
             # Add database error to state
             if state["query_result"]:
                 state["query_result"]["database_result"] = {
@@ -296,7 +296,7 @@ class AgentWorkflow:
                     "row_count": 0,
                     "execution_time": 0
                 }
-            
+
             state["current_stage"] = "database_error"
             state["error"] = str(e)
 
@@ -313,8 +313,8 @@ class AgentWorkflow:
         """
         try:
             logger.info(
-                "Starting response formatting", 
-                user_input=state["user_input"], 
+                "Starting response formatting",
+                user_input=state["user_input"],
                 session_id=state["session_id"]
             )
 
@@ -360,7 +360,7 @@ class AgentWorkflow:
                 fallback_msg = "I successfully retrieved the data from the database, but encountered an issue formatting the response."
                 if db_result.get("success", False) and db_result.get("row_count", 0) > 0:
                     fallback_msg += f" Found {db_result['row_count']} result{'s' if db_result['row_count'] != 1 else ''}."
-                
+
                 final_response["response"] = fallback_msg
 
             # Update state
@@ -368,7 +368,7 @@ class AgentWorkflow:
             state["current_stage"] = "completed"
 
             logger.info(
-                "Response formatting completed", 
+                "Response formatting completed",
                 success=formatted_response.get("success", True),
                 format_type=formatted_response.get("metadata", {}).get("format", "unknown"),
                 session_id=state["session_id"]
@@ -385,7 +385,7 @@ class AgentWorkflow:
                 session_id=state["session_id"],
                 exc_info=True,
             )
-            
+
             # Provide fallback response
             if state["query_result"] and state["query_result"].get("database_result", {}).get("success", False):
                 db_result = state["query_result"]["database_result"]
@@ -393,7 +393,7 @@ class AgentWorkflow:
                 state["query_result"]["response"] = fallback_response
             else:
                 state["query_result"]["response"] = "I encountered an error processing your database query."
-            
+
             state["current_stage"] = "completed_with_error"
             state["error"] = str(e)
 
@@ -414,16 +414,16 @@ class AgentWorkflow:
         """
         try:
             logger.info(
-                "Processing workflow", 
-                user_input=user_input, 
-                session_id=session_id, 
+                "Processing workflow",
+                user_input=user_input,
+                session_id=session_id,
                 context=context
             )
 
             # Initialize state as dictionary for LangGraph
             initial_state = AgentState(
-                session_id=session_id, 
-                user_input=user_input, 
+                session_id=session_id,
+                user_input=user_input,
                 context=context
             )
             state_dict = initial_state.to_dict()
@@ -445,7 +445,7 @@ class AgentWorkflow:
             )
 
             logger.info(
-                "Workflow completed", 
+                "Workflow completed",
                 session_id=session_id,
                 current_stage=final_state.current_stage,
                 has_error=final_state.error is not None
@@ -463,7 +463,7 @@ class AgentWorkflow:
                 context=context,
                 exc_info=True,
             )
-            
+
             # Return error state
             error_state = AgentState(
                 session_id=session_id,
@@ -478,7 +478,7 @@ class AgentWorkflow:
                     "requires_database": False
                 }
             )
-            
+
             return error_state
 
     async def stream_process(
@@ -496,15 +496,15 @@ class AgentWorkflow:
         """
         try:
             logger.info(
-                "Starting streaming workflow", 
-                user_input=user_input, 
+                "Starting streaming workflow",
+                user_input=user_input,
                 session_id=session_id
             )
 
             # For now, process normally and yield the final result
             # TODO: Implement proper streaming when LangGraph supports it better
             final_state = await self.process(user_input, session_id, context)
-            
+
             if final_state.query_result:
                 response = final_state.query_result.get("response", "")
                 # Stream the response in chunks

@@ -1,7 +1,6 @@
 """AI system orchestrator."""
 
 import json
-import time
 from collections.abc import AsyncGenerator
 from typing import Any
 from uuid import uuid4
@@ -177,7 +176,7 @@ class AIOrchestrator:
             # Extract response content
             query_result = result.query_result or {}
             response_content = query_result.get("response", "I apologize, but I couldn't process your request.")
-            
+
             # Send workflow metadata
             yield f"data: {json.dumps({'type': 'metadata', 'data': {'intent': query_result.get('intent', 'unknown'), 'requires_database': query_result.get('requires_database', False), 'sql_query': query_result.get('sql_query'), 'tables_used': query_result.get('tables_used', [])}})}\n\n"
 
@@ -187,7 +186,7 @@ class AIOrchestrator:
                 chunk = response_content[i:i + chunk_size]
                 accumulated_content += chunk
                 yield f"data: {json.dumps({'type': 'token', 'data': {'token': chunk, 'content': accumulated_content}})}\n\n"
-                
+
                 # Small delay to simulate streaming
                 import asyncio
                 await asyncio.sleep(0.05)
@@ -210,7 +209,7 @@ class AIOrchestrator:
                 "success": result.current_stage == "completed",
                 "error": result.error
             }
-            
+
             yield f"data: {json.dumps({'type': 'done', 'data': completion_data})}\n\n"
             yield "data: [DONE]\n\n"
 

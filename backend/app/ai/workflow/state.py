@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 class AgentStateDict(TypedDict):
     """TypedDict for LangGraph state management."""
-    
+
     # Input state
     user_input: str
     session_id: str
@@ -46,7 +46,7 @@ class AgentState(BaseModel):
         """Pydantic model configuration."""
 
         arbitrary_types_allowed = True
-        
+
     def to_dict(self) -> AgentStateDict:
         """Convert to TypedDict for LangGraph."""
         return AgentStateDict(
@@ -58,7 +58,7 @@ class AgentState(BaseModel):
             context=self.context,
             history=self.history
         )
-    
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "AgentState":
         """Create from dictionary."""

@@ -1,16 +1,17 @@
 """Intent classification agent implementation."""
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
+from langchain_core.prompts import PromptTemplate
+from langchain_openai import ChatOpenAI
+
 from app.ai.agents.base import BaseAgent
 from app.ai.agents.query.agent import QueryAgent, QueryType  # Import QueryType from query agent
 from app.ai.core.config import AIConfig
 from app.core.config import settings
 from app.schemas.ai import QueryRequest
-from langchain_core.prompts import PromptTemplate
-from langchain_openai import ChatOpenAI
 
 logger = structlog.get_logger()
 
@@ -27,15 +28,15 @@ class IntentType(str, Enum):
 
 class StandardResponse:
     """Standardized response format for all intent types."""
-    
+
     def __init__(
         self,
         intent: IntentType,
         response: str,
         requires_database: bool = False,
         success: bool = True,
-        metadata: Optional[Dict[str, Any]] = None,
-        error: Optional[str] = None,
+        metadata: dict[str, Any] | None = None,
+        error: str | None = None,
         **kwargs
     ):
         self.intent = intent
@@ -44,12 +45,12 @@ class StandardResponse:
         self.success = success
         self.metadata = metadata or {}
         self.error = error
-        
+
         # Add any additional fields
         for key, value in kwargs.items():
             setattr(self, key, value)
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary format."""
         result = {
             "intent": self.intent,
@@ -58,15 +59,15 @@ class StandardResponse:
             "success": self.success,
             "metadata": self.metadata
         }
-        
+
         if self.error:
             result["error"] = self.error
-            
+
         # Add any additional attributes
         for key, value in self.__dict__.items():
             if key not in result:
                 result[key] = value
-                
+
         return result
 
 
@@ -249,7 +250,7 @@ Response:""",
         try:
             # Parse and validate input data
             request = QueryRequest(**input_data)
-            
+
             # Get context from metadata
             context = request.metadata or {}
             context_str = self._format_context(context)
@@ -266,12 +267,12 @@ Response:""",
 
         except Exception as e:
             logger.error(
-                "Error processing intent", 
-                error=str(e), 
-                input_data=input_data, 
+                "Error processing intent",
+                error=str(e),
+                input_data=input_data,
                 agent_type="intent"
             )
-            
+
             error_response = StandardResponse(
                 intent=IntentType.UNKNOWN,
                 response="I apologize, but I encountered an error processing your request. Please try again.",
@@ -326,7 +327,7 @@ Response:""",
         try:
             # Extract enhanced query parameters
             query_params = await self._extract_query_parameters(request.query)
-            
+
             # Prepare input for query agent in the exact format it expects
             query_input = {
                 "query": request.query,
@@ -367,7 +368,7 @@ Response:""",
 
         except Exception as e:
             logger.error("Error handling database query", error=str(e), query=request.query)
-            
+
             error_response = StandardResponse(
                 intent=IntentType.DATABASE_QUERY,
                 response="I understand you want to query the database, but I encountered an error processing your request.",
@@ -378,9 +379,9 @@ Response:""",
             return error_response.to_dict()
 
     async def _handle_general_response(
-        self, 
-        request: QueryRequest, 
-        intent_type: IntentType, 
+        self,
+        request: QueryRequest,
+        intent_type: IntentType,
         context: str
     ) -> dict[str, Any]:
         """Handle general conversation intent.
@@ -413,7 +414,7 @@ Response:""",
 
         except Exception as e:
             logger.error("Error generating general response", error=str(e), intent=intent_type)
-            
+
             # Fallback responses based on intent
             fallback_responses = {
                 IntentType.GREETING: "Hello! I'm ResourceWise AI Assistant. I can help you with resource allocation, finding employees, checking project status, and more. How can I assist you today?",
@@ -442,21 +443,21 @@ Response:""",
         """
         try:
             result = await self.extraction_chain.ainvoke({"user_input": user_input})
-            
+
             # Try to parse JSON response
             import json
             import re
             try:
                 content = str(result.content)
-                
+
                 # Strip markdown code block formatting if present
                 # Pattern matches ```json\n...``` or ```\n...```
                 json_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', content, re.DOTALL)
                 if json_match:
                     content = json_match.group(1).strip()
-                
+
                 params = json.loads(content)
-                
+
                 # Ensure query_type is mapped to QueryType enum
                 query_type_str = params.get("query_type", "resource_search")
                 query_type_mapping = {
@@ -467,13 +468,13 @@ Response:""",
                     "unknown": QueryType.UNKNOWN
                 }
                 params["query_type"] = query_type_mapping.get(query_type_str, QueryType.RESOURCE_SEARCH)
-                
+
                 # Set reasonable defaults if not specified
                 if "limit" not in params:
                     params["limit"] = 50
-                    
+
                 return params
-                
+
             except json.JSONDecodeError:
                 # Fallback to basic extraction with keyword analysis
                 logger.warning("Failed to parse JSON from query extraction", response=str(result.content))
@@ -493,7 +494,7 @@ Response:""",
             Basic parameters dictionary
         """
         lower_input = user_input.lower()
-        
+
         # Determine query type based on keywords
         if any(keyword in lower_input for keyword in ["skill", "technology", "expertise", "programming"]):
             query_type = QueryType.SKILL_SEARCH
@@ -506,7 +507,7 @@ Response:""",
 
         # Extract basic filters
         filters = {}
-        
+
         # Look for email addresses
         import re
         email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'

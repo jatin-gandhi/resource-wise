@@ -1,8 +1,7 @@
 """LLM implementation using OpenAI."""
 
 import json
-import time
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import structlog
 from openai import AsyncOpenAI
@@ -19,10 +18,10 @@ class LLMService:
     def __init__(self, config: AIConfig):
         """Initialize the LLM service."""
         self.config = config
-        
+
         # Use OpenAI API key from main settings
         api_key = config.api_key or settings.OPENAI_API_KEY
-        
+
         if not api_key:
             logger.warning("openai api key missing")
             self.client = None
@@ -42,7 +41,7 @@ Respond for this message from the user: {user_message}"""
         self,
         user_message: str,
         session_id: str,
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[str]:
         """Stream a chat completion response."""
         if not self.client:
             logger.error("openai client not available")
@@ -51,11 +50,11 @@ Respond for this message from the user: {user_message}"""
 
         try:
             logger.info(f"msg received: {len(user_message)}chars")
-            
+
             prompt = self._create_prompt(user_message)
-            
+
             logger.info("calling openai api...")
-            
+
             # Send start event
             yield f"data: {json.dumps({'type': 'start', 'data': {'session_id': session_id}})}\n\n"
 
@@ -71,17 +70,17 @@ Respond for this message from the user: {user_message}"""
             )
 
             logger.info("openai streaming started")
-            
+
             accumulated_content = ""
             token_count = 0
-            
+
             # Process streaming response
             async for chunk in stream:
                 if chunk.choices and chunk.choices[0].delta.content:
                     token = chunk.choices[0].delta.content
                     accumulated_content += token
                     token_count += 1
-                    
+
                     # Send token event
                     yield f"data: {json.dumps({'type': 'token', 'data': {'token': token, 'content': accumulated_content}})}\n\n"
 
@@ -106,9 +105,9 @@ Respond for this message from the user: {user_message}"""
 
         try:
             logger.info(f"msg received: {len(user_message)}chars")
-            
+
             prompt = self._create_prompt(user_message)
-            
+
             logger.info("calling openai api...")
 
             response = await self.client.chat.completions.create(
@@ -121,13 +120,13 @@ Respond for this message from the user: {user_message}"""
             )
 
             content = response.choices[0].message.content or ""
-            
+
             # Extract token usage if available
             usage = response.usage
             tokens_used = f", {usage.total_tokens}tokens" if usage else ""
-            
+
             logger.info(f"response received: {len(content)}chars{tokens_used}")
-            
+
             return content
 
         except Exception as e:
