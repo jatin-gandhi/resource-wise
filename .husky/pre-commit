@@ -1,7 +1,7 @@
 cd frontend
 
 echo "\n\n🎨 Checking code formatting with Prettier..."
-npm run prettier:apply . || { echo "❌ Prettier check failed. Please run 'npm run prettier:apply' and stage the changes. Aborting commit."; exit 1; }
+npm run format . || { echo "❌ Prettier check failed. Please run 'npm run prettier:apply' and stage the changes. Aborting commit."; exit 1; }
 
 echo "\n\n🔍 Running ESLint for code quality checks..."
 npm run lint:fix || { echo "❌ ESLint check failed. Please fix issues and stage the changes. Aborting commit."; exit 1; }
