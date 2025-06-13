@@ -1,0 +1,258 @@
+# AI-Powered Resource Allocation System
+
+🔥 Problem Statement
+Project managers often rely on manual tools (like spreadsheets) and internal org level knowledge to allocate developers to projects. This process is:
+Time-consuming
+
+
+- Error-prone
+- Lacks visibility and historical data insights
+- Doesn’t use skill matching effectively
+
+
+Our goal is to automate and optimize this with an AI-assisted platform that:
+- Extracts project requirements from structured and unstructured inputs (text, docs like SOW/WBS)
+- Suggests optimal allocations based on availability, skills, recent experience, and preferences
+- Allows conversational interactions for modification and refinement
+- Supports querying project/employee allocation details
+
+
+
+🌐 Use Cases (Examples)
+✅ Project Creation & Allocation
+"I need a team to build a mobile app over the next 3 months. 1 TL, 2 SSEs, 3 SDs."
+System:
+Parses this input
+
+
+Matches employees based on recent mobile app experience (React Native, Flutter)
+
+
+Respects current availability and capacity
+
+
+Suggests allocations, confirms with user
+
+
+✅ Querying
+"Show me all ongoing projects for the next 2 months"
+"What has X been working on over the last year?"
+"Who has worked with .NET and is free next month?"
+System performs:
+Fuzzy matching (e.g., .NET Core = .NET)
+
+
+Time-based filtering
+
+
+Skill relevance scoring
+
+
+✅ AI Chat Interface
+"I want to replace A with B in Project Y"
+"Who has chatbot/NLP experience and is 70% available next month?"
+The AI layer interprets and fetches relevant data from DB.
+
+🤖 Components Overview
+1. Frontend (UI)
+Chat-like interface (inspired by ChatGPT)
+
+
+Optional manual form entry
+
+
+Upload documents (SOW, WBS)
+
+
+2. Backend (MCP Server)
+API layer built using FastAPI (chosen for speed, typing, OpenAPI docs)
+
+
+Handles:
+
+
+Document ingestion
+
+
+Parsing
+
+
+Chat session management
+
+
+DB queries
+
+
+Calling embedding APIs
+
+
+3. AI Layer
+Uses OpenAI Embedding API for semantic vector generation
+
+
+Handles:
+
+
+Fuzzy/natural language parsing
+
+
+Skill mapping ("mobile app" → Flutter, React Native)
+
+
+Query generation for DB
+
+
+4. Database
+PostgreSQL (hosted in AWS RDS in VPC)
+
+
+Uses:
+
+
+tsvector + GIN for structured text search
+
+
+pgvector for semantic embeddings
+
+
+5. Document Intelligence
+AWS Textract (OCR + form/table detection) for local extraction
+
+
+Not using OpenAI for SOW/WBS parsing (data privacy)
+
+
+6. Data Sources
+PAT API (Self-assessment every 6 months)
+
+
+KD Allocation Sheet (initial seed for allocations)
+
+
+Doors API (onboarding/offboarding employees)
+
+
+
+🏛️ Database Schema (Simplified)
+Employee
+CREATE TABLE employees (
+  id UUID PRIMARY KEY,
+  name TEXT,
+  designation TEXT,  -- TL, SSE, SD, etc.
+  capacity_percent INT, -- e.g. 100, 70, 50
+  onboarded_at DATE,
+  is_active BOOLEAN
+);
+PAT Skill Record
+CREATE TABLE employee_skills (
+  id UUID PRIMARY KEY,
+  employee_id UUID REFERENCES employees(id),
+  skill_name TEXT,
+  summary TEXT,
+  experience_months INT,
+  last_used DATE,
+  source TEXT,  -- 'PAT', etc.
+  created_at TIMESTAMP
+);
+Skill Embeddings
+CREATE TABLE employee_embeddings (
+  employee_id UUID REFERENCES employees(id),
+  source TEXT,
+  summary TEXT,
+  embedding VECTOR(1536),
+  created_at TIMESTAMP,
+  PRIMARY KEY (employee_id, source)
+);
+Project
+CREATE TABLE projects (
+  id UUID PRIMARY KEY,
+  name TEXT,
+  description TEXT,
+  duration_months INT,
+  tech_stack TEXT[],
+  created_at TIMESTAMP
+);
+Allocation
+CREATE TABLE allocations (
+  id UUID PRIMARY KEY,
+  project_id UUID REFERENCES projects(id),
+  employee_id UUID REFERENCES employees(id),
+  percent_allocated INT,
+  start_date DATE,
+  end_date DATE
+);
+
+🌈 AI Query Workflow
+sequenceDiagram
+User->>Frontend: "Need a team for mobile app"
+Frontend->>Backend (FastAPI): POST /chat
+Backend->>OpenAI: Embed("mobile app")
+OpenAI-->>Backend: vector
+Backend->>PostgreSQL: vector search (pgvector + filters)
+Backend-->>Frontend: Suggest optimal team
+User->>Frontend: "Replace X with Y"
+Frontend->>Backend: PATCH /allocation
+Backend->>PostgreSQL: Update
+
+🚀 Tech Stack
+Layer
+Tech
+Reason
+Frontend
+React (Chat UI)
+Familiarity, ease of use
+Backend
+FastAPI
+Async, OpenAPI, typing
+AI Embedding
+OpenAI API
+High quality, no hosting
+Skill DB
+PostgreSQL + pgvector + tsvector
+Fast, scalable, hybrid search
+Infra
+AWS (Lambda, RDS, Textract, VPC)
+Secure, serverless, scalable
+
+
+⚡ Security Considerations
+All infra in VPC (RDS in private subnet)
+
+
+OpenAI only used for embedding, not document parsing
+
+
+Textract used locally for SOW/WBS
+
+
+Employee data only fetched from known sources (PAT, Doors)
+
+
+
+🔄 Data Refresh Strategy
+Data Source
+Refresh Interval
+How
+PAT
+6 months
+Pull via API, versioned skill entries
+Allocation
+On-demand
+Exposed PATCH APIs + ingestion of KD sheet
+Onboarding
+Real-time
+Doors API calls our endpoint
+
+
+✅ Summary
+This system aims to reduce the manual effort of resource allocation while improving match accuracy and visibility. It balances:
+AI-driven flexibility (semantic search, conversational UI)
+
+
+Human-in-the-loop refinement (chat flow)
+
+
+Enterprise compliance (security, VPC, private data handling)
+
+
+
