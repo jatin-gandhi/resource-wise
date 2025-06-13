@@ -7,9 +7,9 @@ Create Date: 2025-06-12 23:01:12.270623
 """
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
-import pgvector
+from alembic import op
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
@@ -177,23 +177,41 @@ def upgrade() -> None:
     op.create_index(op.f('ix_allocations_start_date'), 'allocations', ['start_date'], unique=False)
     op.create_index(op.f('ix_allocations_status'), 'allocations', ['status'], unique=False)
     op.create_index(op.f('ix_allocations_updated_by'), 'allocations', ['updated_by'], unique=False)
-    op.create_table('employee_embeddings',
-    sa.Column('employee_id', sa.UUID(), nullable=False),
-    sa.Column('source', sa.String(length=50), nullable=False),
-    sa.Column('summary', sa.Text(), nullable=False),
-    sa.Column('embedding', pgvector.sqlalchemy.vector.VECTOR(dim=1536), nullable=True),
-    sa.Column('search_vector', postgresql.TSVECTOR(), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('deleted_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('created_by', sa.UUID(), nullable=True),
-    sa.Column('updated_by', sa.UUID(), nullable=True),
-    sa.Column('deleted_by', sa.UUID(), nullable=True),
-    sa.ForeignKeyConstraint(['created_by'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['deleted_by'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['employee_id'], ['employees.id'], ),
-    sa.ForeignKeyConstraint(['updated_by'], ['users.id'], ),
-    sa.PrimaryKeyConstraint('employee_id', 'source')
+    op.create_table(
+        "employee_embeddings",
+        sa.Column("employee_id", sa.UUID(), nullable=False),
+        sa.Column("source", sa.String(length=50), nullable=False),
+        sa.Column("summary", sa.Text(), nullable=False),
+        sa.Column("embedding", Vector(dim=1536), nullable=True),
+        sa.Column("search_vector", postgresql.TSVECTOR(), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_by", sa.UUID(), nullable=True),
+        sa.Column("updated_by", sa.UUID(), nullable=True),
+        sa.Column("deleted_by", sa.UUID(), nullable=True),
+        sa.ForeignKeyConstraint(
+            ["created_by"],
+            ["users.id"],
+        ),
+        sa.ForeignKeyConstraint(
+            ["deleted_by"],
+            ["users.id"],
+        ),
+        sa.ForeignKeyConstraint(
+            ["employee_id"],
+            ["employees.id"],
+        ),
+        sa.ForeignKeyConstraint(
+            ["updated_by"],
+            ["users.id"],
+        ),
+        sa.PrimaryKeyConstraint("employee_id", "source"),
     )
     op.create_index('idx_employee_embedding_cosine', 'employee_embeddings', ['embedding'], unique=False, postgresql_using='hnsw', postgresql_with={'m': 16, 'ef_construction': 64}, postgresql_ops={'embedding': 'vector_cosine_ops'})
     op.create_index('idx_employee_embedding_ivfflat', 'employee_embeddings', ['embedding'], unique=False, postgresql_using='ivfflat', postgresql_with={'lists': 100}, postgresql_ops={'embedding': 'vector_cosine_ops'})

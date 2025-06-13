@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.database import create_tables
-from app.routers import allocations, chat, employees, health, projects
+from app.routers import ai, allocations, chat, employees, health, projects
 
 # Configure structured logging
 structlog.configure(
@@ -70,6 +70,7 @@ app.include_router(chat.router, prefix="/api/v1", tags=["chat"])
 app.include_router(employees.router, prefix="/api/v1", tags=["employees"])
 app.include_router(projects.router, prefix="/api/v1", tags=["projects"])
 app.include_router(allocations.router, prefix="/api/v1", tags=["allocations"])
+app.include_router(ai.router, prefix="/api/v1", tags=["ai"])
 
 
 @app.get("/")

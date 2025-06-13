@@ -11,28 +11,25 @@ dependencies = [
     # Core FastAPI
     "fastapi>=0.115.12",
     "uvicorn>=0.34.3",
-    
     # Database & ORM
     "sqlalchemy>=2.0.25",
     "asyncpg>=0.29.0",
     "alembic>=1.13.1",
-    "psycopg2-binary>=2.9.9",  # Required for Alembic migrations
-    
+    "psycopg2-binary>=2.9.9", # Required for Alembic migrations
     # Vector Database (for AI embeddings)
     "pgvector>=0.3.6",
-    
     # AI & Embeddings
     "openai>=1.52.0",
-    
+    "langchain>=0.1.0",
+    "langgraph>=0.0.15",
     # HTTP Client (for OpenAI API calls)
     "httpx>=0.27.0",
-    
     # Configuration & Environment
     "python-dotenv>=1.0.0",
     "pydantic-settings>=2.6.1",
-    
     # Logging
     "structlog>=24.4.0",
+    "greenlet>=3.2.3",
 ]
 
 [tool.ruff]
@@ -45,6 +42,8 @@ exclude = [
     "alembic/versions/*",
     "alembic/versions/**/*.py",
 ]
+
+ignore = ["B008", "B904"]
 
 [tool.ruff.lint]
 select = [
