@@ -56,7 +56,7 @@ class AgentState(BaseModel):
             error=self.error,
             query_result=self.query_result,
             context=self.context,
-            history=self.history
+            history=self.history,
         )
 
     @classmethod
@@ -69,5 +69,5 @@ class AgentState(BaseModel):
             error=data.get("error"),
             query_result=data.get("query_result"),
             context=data.get("context", {}),
-            history=data.get("history", [])
+            history=data.get("history", []),
         )

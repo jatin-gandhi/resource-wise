@@ -73,19 +73,19 @@ class AIOrchestrator:
             workflow_context = {
                 "user_id": user_id,
                 "history": context.history if context else [],
-                **(metadata or {})
+                **(metadata or {}),
             }
 
             # Process through workflow
             result = await self.workflow.process(
-                user_input=query,
-                session_id=session_id,
-                context=workflow_context
+                user_input=query, session_id=session_id, context=workflow_context
             )
 
             # Extract response content
             query_result = result.query_result or {}
-            response_content = query_result.get("response", "I apologize, but I couldn't process your request.")
+            response_content = query_result.get(
+                "response", "I apologize, but I couldn't process your request."
+            )
 
             # Add assistant response to history
             self.context_service.add_to_history(
@@ -104,10 +104,10 @@ class AIOrchestrator:
                     "metadata": {
                         "current_stage": result.current_stage,
                         "workflow_success": result.current_stage == "completed",
-                        **query_result.get("metadata", {})
-                    }
+                        **query_result.get("metadata", {}),
+                    },
                 },
-                "error": result.error
+                "error": result.error,
             }
 
         except Exception as e:
@@ -117,9 +117,9 @@ class AIOrchestrator:
                 "result": {
                     "content": f"I encountered an error processing your request: {str(e)}",
                     "intent": "error",
-                    "requires_database": False
+                    "requires_database": False,
                 },
-                "error": str(e)
+                "error": str(e),
             }
 
     async def stream_query(
@@ -162,20 +162,20 @@ class AIOrchestrator:
             workflow_context = {
                 "user_id": user_id,
                 "history": context.history if context else [],
-                **(metadata or {})
+                **(metadata or {}),
             }
 
             # Process through workflow (non-streaming for now)
             # TODO: Implement proper streaming when workflow supports it
             result = await self.workflow.process(
-                user_input=query,
-                session_id=session_id,
-                context=workflow_context
+                user_input=query, session_id=session_id, context=workflow_context
             )
 
             # Extract response content
             query_result = result.query_result or {}
-            response_content = query_result.get("response", "I apologize, but I couldn't process your request.")
+            response_content = query_result.get(
+                "response", "I apologize, but I couldn't process your request."
+            )
 
             # Send workflow metadata
             yield f"data: {json.dumps({'type': 'metadata', 'data': {'intent': query_result.get('intent', 'unknown'), 'requires_database': query_result.get('requires_database', False), 'sql_query': query_result.get('sql_query'), 'tables_used': query_result.get('tables_used', [])}})}\n\n"
@@ -183,18 +183,20 @@ class AIOrchestrator:
             # Stream the response content in chunks
             chunk_size = 20  # Smaller chunks for better streaming experience
             for i in range(0, len(response_content), chunk_size):
-                chunk = response_content[i:i + chunk_size]
+                chunk = response_content[i : i + chunk_size]
                 accumulated_content += chunk
                 yield f"data: {json.dumps({'type': 'token', 'data': {'token': chunk, 'content': accumulated_content}})}\n\n"
 
                 # Small delay to simulate streaming
                 import asyncio
+
                 await asyncio.sleep(0.05)
 
             # Add final response to history
             if accumulated_content:
                 self.context_service.add_to_history(
-                    session_id=session_id, message={"role": "assistant", "content": accumulated_content}
+                    session_id=session_id,
+                    message={"role": "assistant", "content": accumulated_content},
                 )
 
             # Send completion event with full metadata
@@ -207,7 +209,7 @@ class AIOrchestrator:
                 "tables_used": query_result.get("tables_used", []),
                 "current_stage": result.current_stage,
                 "success": result.current_stage == "completed",
-                "error": result.error
+                "error": result.error,
             }
 
             yield f"data: {json.dumps({'type': 'done', 'data': completion_data})}\n\n"

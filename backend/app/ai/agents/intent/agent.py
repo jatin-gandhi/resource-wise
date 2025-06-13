@@ -37,7 +37,7 @@ class StandardResponse:
         success: bool = True,
         metadata: dict[str, Any] | None = None,
         error: str | None = None,
-        **kwargs
+        **kwargs,
     ):
         self.intent = intent
         self.response = response
@@ -57,7 +57,7 @@ class StandardResponse:
             "response": self.response,
             "requires_database": self.requires_database,
             "success": self.success,
-            "metadata": self.metadata
+            "metadata": self.metadata,
         }
 
         if self.error:
@@ -257,7 +257,9 @@ Response:""",
 
             # Classify user intent
             intent_type = await self._classify_intent(request.query, context_str)
-            logger.info("Intent classified", intent=intent_type, query=request.query, agent_type="intent")
+            logger.info(
+                "Intent classified", intent=intent_type, query=request.query, agent_type="intent"
+            )
 
             # Route based on intent
             if intent_type == IntentType.DATABASE_QUERY:
@@ -267,17 +269,14 @@ Response:""",
 
         except Exception as e:
             logger.error(
-                "Error processing intent",
-                error=str(e),
-                input_data=input_data,
-                agent_type="intent"
+                "Error processing intent", error=str(e), input_data=input_data, agent_type="intent"
             )
 
             error_response = StandardResponse(
                 intent=IntentType.UNKNOWN,
                 response="I apologize, but I encountered an error processing your request. Please try again.",
                 success=False,
-                error=str(e)
+                error=str(e),
             )
             return error_response.to_dict()
 
@@ -292,10 +291,7 @@ Response:""",
             Classified intent type
         """
         try:
-            chain_input = {
-                "user_input": user_input,
-                "context": context
-            }
+            chain_input = {"user_input": user_input, "context": context}
 
             result = await self.classification_chain.ainvoke(chain_input)
             intent_str = str(result.content).strip().upper()
@@ -306,7 +302,7 @@ Response:""",
                 "GENERAL_CONVERSATION": IntentType.GENERAL_CONVERSATION,
                 "GREETING": IntentType.GREETING,
                 "HELP_REQUEST": IntentType.HELP_REQUEST,
-                "UNKNOWN": IntentType.UNKNOWN
+                "UNKNOWN": IntentType.UNKNOWN,
             }
 
             return intent_mapping.get(intent_str, IntentType.UNKNOWN)
@@ -333,7 +329,7 @@ Response:""",
                 "query": request.query,
                 "session_id": request.session_id,
                 "user_id": request.user_id,
-                "metadata": query_params  # This contains query_type and all other parameters
+                "metadata": query_params,  # This contains query_type and all other parameters
             }
 
             # Process through query agent
@@ -347,7 +343,7 @@ Response:""",
                     requires_database=True,
                     success=False,
                     error=query_result["error"],
-                    query_type=query_params.get("query_type", "unknown")
+                    query_type=query_params.get("query_type", "unknown"),
                 )
                 return error_response.to_dict()
 
@@ -362,7 +358,7 @@ Response:""",
                 sql_query=query_result.get("query", ""),
                 tables=query_result.get("tables", []),
                 filters=query_result.get("filters", ""),
-                metadata=query_params
+                metadata=query_params,
             )
             return success_response.to_dict()
 
@@ -374,15 +370,12 @@ Response:""",
                 response="I understand you want to query the database, but I encountered an error processing your request.",
                 requires_database=True,
                 success=False,
-                error=str(e)
+                error=str(e),
             )
             return error_response.to_dict()
 
     async def _handle_general_response(
-        self,
-        request: QueryRequest,
-        intent_type: IntentType,
-        context: str
+        self, request: QueryRequest, intent_type: IntentType, context: str
     ) -> dict[str, Any]:
         """Handle general conversation intent.
 
@@ -398,17 +391,14 @@ Response:""",
             chain_input = {
                 "user_input": request.query,
                 "intent_type": intent_type.value,
-                "context": context
+                "context": context,
             }
 
             result = await self.response_chain.ainvoke(chain_input)
             response = str(result.content)
 
             success_response = StandardResponse(
-                intent=intent_type,
-                response=response,
-                requires_database=False,
-                success=True
+                intent=intent_type, response=response, requires_database=False, success=True
             )
             return success_response.to_dict()
 
@@ -420,15 +410,17 @@ Response:""",
                 IntentType.GREETING: "Hello! I'm ResourceWise AI Assistant. I can help you with resource allocation, finding employees, checking project status, and more. How can I assist you today?",
                 IntentType.HELP_REQUEST: "I can help you with resource allocation and project management tasks. You can ask me to find employees by skills, check project allocations, search for team members, or get information about projects and departments. What would you like to know?",
                 IntentType.GENERAL_CONVERSATION: "I'm here to help with resource allocation and project management. Please let me know what specific information you need.",
-                IntentType.UNKNOWN: "I'm not sure how to help with that. I specialize in resource allocation, employee search, project management, and skill matching. Could you please rephrase your question?"
+                IntentType.UNKNOWN: "I'm not sure how to help with that. I specialize in resource allocation, employee search, project management, and skill matching. Could you please rephrase your question?",
             }
 
             fallback_response = StandardResponse(
                 intent=intent_type,
-                response=fallback_responses.get(intent_type, fallback_responses[IntentType.UNKNOWN]),
+                response=fallback_responses.get(
+                    intent_type, fallback_responses[IntentType.UNKNOWN]
+                ),
                 requires_database=False,
                 success=False,
-                error=str(e)
+                error=str(e),
             )
             return fallback_response.to_dict()
 
@@ -447,12 +439,13 @@ Response:""",
             # Try to parse JSON response
             import json
             import re
+
             try:
                 content = str(result.content)
 
                 # Strip markdown code block formatting if present
                 # Pattern matches ```json\n...``` or ```\n...```
-                json_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', content, re.DOTALL)
+                json_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", content, re.DOTALL)
                 if json_match:
                     content = json_match.group(1).strip()
 
@@ -465,9 +458,11 @@ Response:""",
                     "skill_search": QueryType.SKILL_SEARCH,
                     "department_search": QueryType.DEPARTMENT_SEARCH,
                     "analytics": QueryType.ANALYTICS,
-                    "unknown": QueryType.UNKNOWN
+                    "unknown": QueryType.UNKNOWN,
                 }
-                params["query_type"] = query_type_mapping.get(query_type_str, QueryType.RESOURCE_SEARCH)
+                params["query_type"] = query_type_mapping.get(
+                    query_type_str, QueryType.RESOURCE_SEARCH
+                )
 
                 # Set reasonable defaults if not specified
                 if "limit" not in params:
@@ -477,7 +472,9 @@ Response:""",
 
             except json.JSONDecodeError:
                 # Fallback to basic extraction with keyword analysis
-                logger.warning("Failed to parse JSON from query extraction", response=str(result.content))
+                logger.warning(
+                    "Failed to parse JSON from query extraction", response=str(result.content)
+                )
                 return self._fallback_parameter_extraction(user_input)
 
         except Exception as e:
@@ -496,11 +493,26 @@ Response:""",
         lower_input = user_input.lower()
 
         # Determine query type based on keywords
-        if any(keyword in lower_input for keyword in ["skill", "technology", "expertise", "programming"]):
+        if any(
+            keyword in lower_input
+            for keyword in ["skill", "technology", "expertise", "programming"]
+        ):
             query_type = QueryType.SKILL_SEARCH
         elif any(keyword in lower_input for keyword in ["department", "team", "group", "division"]):
             query_type = QueryType.DEPARTMENT_SEARCH
-        elif any(keyword in lower_input for keyword in ["overallocation", "overallocated", "summary", "analysis", "report", "metrics", "timeline", "composition"]):
+        elif any(
+            keyword in lower_input
+            for keyword in [
+                "overallocation",
+                "overallocated",
+                "summary",
+                "analysis",
+                "report",
+                "metrics",
+                "timeline",
+                "composition",
+            ]
+        ):
             query_type = QueryType.ANALYTICS
         else:
             query_type = QueryType.RESOURCE_SEARCH
@@ -510,13 +522,20 @@ Response:""",
 
         # Look for email addresses
         import re
-        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+
+        email_pattern = r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"
         emails = re.findall(email_pattern, user_input)
         if emails:
             filters["email"] = emails[0]
 
         # Look for common designations
-        designations = ["software engineer", "senior software engineer", "tech lead", "manager", "developer"]
+        designations = [
+            "software engineer",
+            "senior software engineer",
+            "tech lead",
+            "manager",
+            "developer",
+        ]
         for designation in designations:
             if designation in lower_input:
                 filters["designation"] = designation.title()
@@ -529,16 +548,11 @@ Response:""",
             filters["project_status"] = "completed"
 
         # Look for percentage thresholds
-        percentage_matches = re.findall(r'(\d+)%', user_input)
+        percentage_matches = re.findall(r"(\d+)%", user_input)
         if percentage_matches:
             filters["availability_threshold"] = int(percentage_matches[0])
 
-        return {
-            "query_type": query_type,
-            "entities": [],
-            "filters": filters,
-            "limit": 50
-        }
+        return {"query_type": query_type, "entities": [], "filters": filters, "limit": 50}
 
     def _format_context(self, context: dict[str, Any]) -> str:
         """Format context for prompt inclusion.

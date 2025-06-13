@@ -26,10 +26,7 @@ class LLMService:
             logger.warning("openai api key missing")
             self.client = None
         else:
-            self.client = AsyncOpenAI(
-                api_key=api_key,
-                base_url=config.api_base
-            )
+            self.client = AsyncOpenAI(api_key=api_key, base_url=config.api_base)
             logger.info(f"openai client ready ({config.model_name})")
 
     def _create_prompt(self, user_message: str) -> str:
@@ -61,9 +58,7 @@ Respond for this message from the user: {user_message}"""
             # Create streaming completion
             stream = await self.client.chat.completions.create(
                 model=self.config.model_name,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ],
+                messages=[{"role": "user", "content": prompt}],
                 stream=True,
                 temperature=self.config.temperature,
                 # max_tokens=1000,
@@ -112,9 +107,7 @@ Respond for this message from the user: {user_message}"""
 
             response = await self.client.chat.completions.create(
                 model=self.config.model_name,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ],
+                messages=[{"role": "user", "content": prompt}],
                 temperature=self.config.temperature,
                 # max_tokens=1000,
             )

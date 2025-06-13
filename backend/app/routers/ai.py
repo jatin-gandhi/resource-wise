@@ -20,10 +20,7 @@ def get_orchestrator() -> AIOrchestrator:
 
 
 @router.get("/health")
-async def health_check(
-    request: Request,
-    orchestrator: AIOrchestrator = Depends(get_orchestrator)
-):
+async def health_check(request: Request, orchestrator: AIOrchestrator = Depends(get_orchestrator)):
     """Check AI service health and OpenAI configuration."""
     start_time = time.time()
 
@@ -34,11 +31,7 @@ async def health_check(
         status = "healthy" if openai_configured else "degraded"
         message = "AI service is running" if openai_configured else "OpenAI API key not configured"
 
-        response = {
-            "status": status,
-            "openai_configured": openai_configured,
-            "message": message
-        }
+        response = {"status": status, "openai_configured": openai_configured, "message": message}
 
         processing_time = round((time.time() - start_time) * 1000, 1)
         logger.info(f"@/health ✓ {processing_time}ms")
@@ -101,10 +94,10 @@ async def stream_query(
             token_count = 0
             try:
                 async for chunk in orchestrator.stream_query(
-                query=request.query,
-                session_id=request.session_id,
-                user_id=request.user_id,
-                metadata=request.metadata,
+                    query=request.query,
+                    session_id=request.session_id,
+                    user_id=request.user_id,
+                    metadata=request.metadata,
                 ):
                     token_count += 1
                     yield chunk
@@ -125,7 +118,7 @@ async def stream_query(
                 "Connection": "keep-alive",
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Headers": "*",
-            }
+            },
         )
 
     except Exception as e:

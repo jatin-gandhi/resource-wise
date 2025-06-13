@@ -18,16 +18,17 @@ class DatabaseService:
         self._connection_pool: asyncpg.Pool | None = None
         self._max_rows = 1000  # Maximum rows to return
         self._query_timeout = 30  # Query timeout in seconds
-        self._db_host = 'localhost'
+        self._db_host = "localhost"
         self._db_port = 5433
-        self._db_user = 'admin'
-        self._db_password = 'admin'
-        self._db_name = 'resourcewise'
-        self._db_driver = 'postgresql+asyncpg'
+        self._db_user = "admin"
+        self._db_password = "admin"
+        self._db_name = "resourcewise"
+        self._db_driver = "postgresql+asyncpg"
 
         # Allowed SQL operations (security whitelist)
         self._allowed_operations = {
-            "SELECT", "WITH"  # Only read operations allowed
+            "SELECT",
+            "WITH",  # Only read operations allowed
         }
 
         # Dangerous SQL patterns to block
@@ -39,8 +40,8 @@ class DatabaseService:
         #     r'\b(UNION|UNION\s+ALL)\b(?!.*FROM)',  # Suspicious UNION usage
         # ]
         self._dangerous_patterns = [
-            r'\b(DROP|DELETE|UPDATE|INSERT|ALTER|CREATE|TRUNCATE)\b',
-            r'\b(EXEC|EXECUTE|xp_|sp_)\b',
+            r"\b(DROP|DELETE|UPDATE|INSERT|ALTER|CREATE|TRUNCATE)\b",
+            r"\b(EXEC|EXECUTE|xp_|sp_)\b",
         ]
 
     async def initialize(self) -> None:
@@ -57,8 +58,8 @@ class DatabaseService:
                     max_size=10,
                     command_timeout=self._query_timeout,
                     server_settings={
-                        'application_name': 'ResourceWise-AI-Agent',
-                    }
+                        "application_name": "ResourceWise-AI-Agent",
+                    },
                 )
                 logger.info("Database connection pool initialized")
         except Exception as e:
@@ -72,11 +73,7 @@ class DatabaseService:
             self._connection_pool = None
             logger.info("Database connection pool closed")
 
-    async def execute_query(
-        self,
-        sql: str,
-        params: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    async def execute_query(self, sql: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Execute a SQL query safely.
 
         Args:
@@ -103,7 +100,7 @@ class DatabaseService:
                     "data": [],
                     "columns": [],
                     "row_count": 0,
-                    "execution_time": 0
+                    "execution_time": 0,
                 }
 
             # Execute query with timeout
@@ -124,7 +121,7 @@ class DatabaseService:
                         columns = list(rows[0].keys())
 
                         # Convert rows to dictionaries, limiting results
-                        limited_rows = rows[:self._max_rows]
+                        limited_rows = rows[: self._max_rows]
                         data = [dict(row) for row in limited_rows]
 
                         # Log if results were truncated
@@ -132,7 +129,7 @@ class DatabaseService:
                             logger.warning(
                                 "Query results truncated",
                                 total_rows=len(rows),
-                                returned_rows=self._max_rows
+                                returned_rows=self._max_rows,
                             )
 
                     execution_time = time.time() - start_time
@@ -144,14 +141,14 @@ class DatabaseService:
                         "row_count": len(data),
                         "total_rows": len(rows),
                         "execution_time": round(execution_time, 3),
-                        "truncated": len(rows) > self._max_rows if rows else False
+                        "truncated": len(rows) > self._max_rows if rows else False,
                     }
 
                     logger.info(
                         "Query executed successfully",
                         row_count=len(data),
                         execution_time=execution_time,
-                        truncated=result["truncated"]
+                        truncated=result["truncated"],
                     )
 
                     return result
@@ -164,7 +161,7 @@ class DatabaseService:
                         "data": [],
                         "columns": [],
                         "row_count": 0,
-                        "execution_time": self._query_timeout
+                        "execution_time": self._query_timeout,
                     }
 
         except Exception as e:
@@ -175,7 +172,7 @@ class DatabaseService:
                 "Database query execution failed",
                 error=error_msg,
                 sql=sql[:200] + "..." if len(sql) > 200 else sql,
-                execution_time=execution_time
+                execution_time=execution_time,
             )
 
             # Categorize error types
@@ -194,7 +191,7 @@ class DatabaseService:
                 "data": [],
                 "columns": [],
                 "row_count": 0,
-                "execution_time": round(execution_time, 3)
+                "execution_time": round(execution_time, 3),
             }
 
     async def validate_query_safety(self, sql: str) -> tuple[bool, str | None]:
@@ -217,7 +214,10 @@ class DatabaseService:
             # Check for allowed operations
             first_word = normalized_sql.split()[0]
             if first_word not in self._allowed_operations:
-                return False, f"Operation '{first_word}' is not allowed. Only SELECT queries are permitted."
+                return (
+                    False,
+                    f"Operation '{first_word}' is not allowed. Only SELECT queries are permitted.",
+                )
 
             # Check for dangerous patterns
             for pattern in self._dangerous_patterns:
@@ -227,11 +227,11 @@ class DatabaseService:
             # Additional safety checks
 
             # Check for excessive complexity (basic heuristic)
-            if normalized_sql.count('(') > 10 or normalized_sql.count('JOIN') > 5:
+            if normalized_sql.count("(") > 10 or normalized_sql.count("JOIN") > 5:
                 return False, "Query is too complex"
 
             # Check for suspicious functions
-            suspicious_functions = ['PG_SLEEP', 'DBMS_LOCK', 'WAITFOR']
+            suspicious_functions = ["PG_SLEEP", "DBMS_LOCK", "WAITFOR"]
             for func in suspicious_functions:
                 if func in normalized_sql:
                     return False, f"Function '{func}' is not allowed"
@@ -258,15 +258,12 @@ class DatabaseService:
                 return {
                     "success": True,
                     "message": "Database connection successful",
-                    "result": result
+                    "result": result,
                 }
 
         except Exception as e:
             logger.error("Database connection test failed", error=str(e))
-            return {
-                "success": False,
-                "error": str(e)
-            }
+            return {"success": False, "error": str(e)}
 
     async def get_table_info(self, table_name: str) -> dict[str, Any]:
         """Get information about a specific table.
@@ -279,11 +276,8 @@ class DatabaseService:
         """
         try:
             # Validate table name (basic security check)
-            if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', table_name):
-                return {
-                    "success": False,
-                    "error": "Invalid table name format"
-                }
+            if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", table_name):
+                return {"success": False, "error": "Invalid table name format"}
 
             query = """
                 SELECT 
@@ -308,15 +302,12 @@ class DatabaseService:
                     "success": True,
                     "table_name": table_name,
                     "columns": columns,
-                    "column_count": len(columns)
+                    "column_count": len(columns),
                 }
 
         except Exception as e:
             logger.error("Failed to get table info", table_name=table_name, error=str(e))
-            return {
-                "success": False,
-                "error": str(e)
-            }
+            return {"success": False, "error": str(e)}
 
 
 # Global database service instance

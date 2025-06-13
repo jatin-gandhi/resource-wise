@@ -17,10 +17,7 @@ class ResponseFormatter:
         self.max_list_items = 50  # Maximum items to show in list format
 
     async def format_database_response(
-        self,
-        query_result: dict[str, Any],
-        query_context: dict[str, Any],
-        original_query: str
+        self, query_result: dict[str, Any], query_context: dict[str, Any], original_query: str
     ) -> dict[str, Any]:
         """Format database query results into user-friendly response.
 
@@ -67,14 +64,11 @@ class ResponseFormatter:
                 "response": f"I retrieved the data successfully, but encountered an error formatting the response: {str(e)}",
                 "formatted_data": None,
                 "summary": "Data formatting error",
-                "success": False
+                "success": False,
             }
 
     def _determine_response_format(
-        self,
-        query_context: dict[str, Any],
-        data: list[dict],
-        columns: list[str]
+        self, query_context: dict[str, Any], data: list[dict], columns: list[str]
     ) -> str:
         """Determine the best response format based on data characteristics.
 
@@ -119,7 +113,7 @@ class ResponseFormatter:
         columns: list[str],
         query_result: dict[str, Any],
         query_context: dict[str, Any],
-        original_query: str
+        original_query: str,
     ) -> dict[str, Any]:
         """Format response as a table."""
         try:
@@ -130,11 +124,7 @@ class ResponseFormatter:
             summary = self._generate_data_summary(data, columns, query_context)
 
             # Create response
-            response_parts = [
-                summary,
-                "",
-                table_md
-            ]
+            response_parts = [summary, "", table_md]
 
             # Add metadata if results were truncated
             if query_result.get("truncated", False):
@@ -147,8 +137,8 @@ class ResponseFormatter:
                 "formatted_data": {
                     "type": "table",
                     "table": table_md,
-                    "data": data[:self.max_table_rows],  # Limit for JSON response
-                    "columns": columns
+                    "data": data[: self.max_table_rows],  # Limit for JSON response
+                    "columns": columns,
                 },
                 "summary": summary,
                 "success": True,
@@ -156,13 +146,15 @@ class ResponseFormatter:
                     "format": "table",
                     "row_count": len(data),
                     "column_count": len(columns),
-                    "execution_time": query_result.get("execution_time", 0)
-                }
+                    "execution_time": query_result.get("execution_time", 0),
+                },
             }
 
         except Exception as e:
             logger.error("Error formatting table response", error=str(e))
-            return await self._format_default_response(data, columns, query_result, query_context, original_query)
+            return await self._format_default_response(
+                data, columns, query_result, query_context, original_query
+            )
 
     async def _format_list_response(
         self,
@@ -170,7 +162,7 @@ class ResponseFormatter:
         columns: list[str],
         query_result: dict[str, Any],
         query_context: dict[str, Any],
-        original_query: str
+        original_query: str,
     ) -> dict[str, Any]:
         """Format response as a list."""
         try:
@@ -179,7 +171,7 @@ class ResponseFormatter:
 
             # Create list items
             list_items = []
-            for i, row in enumerate(data[:self.max_list_items], 1):
+            for i, row in enumerate(data[: self.max_list_items], 1):
                 item = self._format_list_item(row, columns, i)
                 list_items.append(item)
 
@@ -198,20 +190,22 @@ class ResponseFormatter:
                 "formatted_data": {
                     "type": "list",
                     "items": list_items,
-                    "data": data[:self.max_list_items]
+                    "data": data[: self.max_list_items],
                 },
                 "summary": summary,
                 "success": True,
                 "metadata": {
                     "format": "list",
                     "row_count": len(data),
-                    "execution_time": query_result.get("execution_time", 0)
-                }
+                    "execution_time": query_result.get("execution_time", 0),
+                },
             }
 
         except Exception as e:
             logger.error("Error formatting list response", error=str(e))
-            return await self._format_default_response(data, columns, query_result, query_context, original_query)
+            return await self._format_default_response(
+                data, columns, query_result, query_context, original_query
+            )
 
     async def _format_summary_response(
         self,
@@ -219,7 +213,7 @@ class ResponseFormatter:
         columns: list[str],
         query_result: dict[str, Any],
         query_context: dict[str, Any],
-        original_query: str
+        original_query: str,
     ) -> dict[str, Any]:
         """Format response as a summary with key insights."""
         try:
@@ -246,20 +240,22 @@ class ResponseFormatter:
                     "type": "summary",
                     "summary": summary,
                     "statistics": stats,
-                    "sample_data": data[:5] if data else []
+                    "sample_data": data[:5] if data else [],
                 },
                 "summary": summary,
                 "success": True,
                 "metadata": {
                     "format": "summary",
                     "row_count": len(data),
-                    "execution_time": query_result.get("execution_time", 0)
-                }
+                    "execution_time": query_result.get("execution_time", 0),
+                },
             }
 
         except Exception as e:
             logger.error("Error formatting summary response", error=str(e))
-            return await self._format_default_response(data, columns, query_result, query_context, original_query)
+            return await self._format_default_response(
+                data, columns, query_result, query_context, original_query
+            )
 
     async def _format_default_response(
         self,
@@ -267,7 +263,7 @@ class ResponseFormatter:
         columns: list[str],
         query_result: dict[str, Any],
         query_context: dict[str, Any],
-        original_query: str
+        original_query: str,
     ) -> dict[str, Any]:
         """Format default response when other formats fail."""
         try:
@@ -277,7 +273,7 @@ class ResponseFormatter:
                     "formatted_data": {"type": "empty", "data": []},
                     "summary": "No results found",
                     "success": True,
-                    "metadata": {"format": "empty", "row_count": 0}
+                    "metadata": {"format": "empty", "row_count": 0},
                 }
 
             summary = f"Found {len(data)} result{'s' if len(data) != 1 else ''}"
@@ -296,7 +292,7 @@ class ResponseFormatter:
                 "formatted_data": {"type": "json", "data": sample_data},
                 "summary": summary,
                 "success": True,
-                "metadata": {"format": "json", "row_count": len(data)}
+                "metadata": {"format": "json", "row_count": len(data)},
             }
 
         except Exception as e:
@@ -305,13 +301,11 @@ class ResponseFormatter:
                 "response": f"Retrieved {len(data) if data else 0} results, but encountered a formatting error.",
                 "formatted_data": None,
                 "summary": "Formatting error",
-                "success": False
+                "success": False,
             }
 
     async def _format_error_response(
-        self,
-        query_result: dict[str, Any],
-        original_query: str
+        self, query_result: dict[str, Any], original_query: str
     ) -> dict[str, Any]:
         """Format error response."""
         error_type = query_result.get("error_type", "UNKNOWN")
@@ -323,10 +317,12 @@ class ResponseFormatter:
             "TIMEOUT": "The query took too long to execute. Please try a more specific query.",
             "SYNTAX_ERROR": "There was an issue with the query syntax. Let me try to rephrase your request.",
             "CONNECTION_ERROR": "I'm having trouble connecting to the database. Please try again in a moment.",
-            "PERMISSION_ERROR": "I don't have permission to access the requested data."
+            "PERMISSION_ERROR": "I don't have permission to access the requested data.",
         }
 
-        user_message = user_messages.get(error_type, f"I encountered an error while processing your query: {error_msg}")
+        user_message = user_messages.get(
+            error_type, f"I encountered an error while processing your query: {error_msg}"
+        )
 
         return {
             "response": user_message,
@@ -334,7 +330,7 @@ class ResponseFormatter:
             "summary": f"Query failed: {error_type}",
             "success": False,
             "error": error_msg,
-            "error_type": error_type
+            "error_type": error_type,
         }
 
     def _create_markdown_table(self, data: list[dict], columns: list[str]) -> str:
@@ -351,7 +347,7 @@ class ResponseFormatter:
 
         # Create rows
         rows = []
-        for row in data[:self.max_table_rows]:
+        for row in data[: self.max_table_rows]:
             row_values = []
             for col in display_columns:
                 value = row.get(col, "")
@@ -385,9 +381,17 @@ class ResponseFormatter:
         """Determine key fields to display based on column names."""
         # Priority order for common fields
         priority_fields = [
-            "name", "full_name", "first_name", "last_name",
-            "email", "title", "designation", "department",
-            "skill_name", "project_name", "status"
+            "name",
+            "full_name",
+            "first_name",
+            "last_name",
+            "email",
+            "title",
+            "designation",
+            "department",
+            "skill_name",
+            "project_name",
+            "status",
         ]
 
         key_fields = []
@@ -405,10 +409,7 @@ class ResponseFormatter:
         return key_fields
 
     def _generate_data_summary(
-        self,
-        data: list[dict],
-        columns: list[str],
-        query_context: dict[str, Any]
+        self, data: list[dict], columns: list[str], query_context: dict[str, Any]
     ) -> str:
         """Generate a summary of the data."""
         if not data:
@@ -430,10 +431,7 @@ class ResponseFormatter:
             return f"Query completed successfully. Found {count} result{'s' if count != 1 else ''}:"
 
     def _generate_comprehensive_summary(
-        self,
-        data: list[dict],
-        columns: list[str],
-        query_context: dict[str, Any]
+        self, data: list[dict], columns: list[str], query_context: dict[str, Any]
     ) -> str:
         """Generate a comprehensive summary with insights."""
         if not data:
@@ -464,7 +462,9 @@ class ResponseFormatter:
 
                 if status_counts:
                     most_common = max(status_counts, key=status_counts.get)
-                    insights.append(f"- Most common status: {most_common} ({status_counts[most_common]} records)")
+                    insights.append(
+                        f"- Most common status: {most_common} ({status_counts[most_common]} records)"
+                    )
 
             # Add more insight patterns as needed
 
