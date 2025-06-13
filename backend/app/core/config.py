@@ -15,8 +15,8 @@ class Settings(BaseSettings):
     # Database Configuration - Individual Fields
     DB_HOST: str = Field(description="Database host", default="localhost")
     DB_PORT: int = Field(description="Database port", default=5432)
-    DB_USER: str = Field(description="Database user", default="postgres")
-    DB_PASSWORD: str = Field(description="Database password", default="password")
+    DB_USER: str = Field(description="Database user", default="admin")
+    DB_PASSWORD: str = Field(description="Database password", default="admin")
     DB_NAME: str = Field(description="Database name", default="resourcewise")
     DB_DRIVER: str = Field(description="Database driver", default="postgresql+asyncpg")
     DATABASE_ECHO: bool = Field(description="Database echo", default=False)
@@ -36,7 +36,7 @@ class Settings(BaseSettings):
 
     # CORS - Simple string that will be split on comma
     ALLOWED_ORIGINS: str = Field(
-        description="Allowed origins", default="http://localhost:3000,http://localhost:8000"
+        description="Allowed origins", default="http://localhost:5174,http://localhost:8001"
     )
 
     @computed_field

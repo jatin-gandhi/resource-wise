@@ -46,6 +46,10 @@ async def get_async_session() -> AsyncGenerator[AsyncSession]:
             await session.close()
 
 
+# Alias for FastAPI dependency injection
+get_db = get_async_session
+
+
 async def create_tables():
     """Create database tables"""
     try:
