@@ -1,12 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Generated files
+*.min.js
+*.min.css
+
+# Package files
+package-lock.json
+yarn.lock
+
+# Config files that should maintain their format
+.gitignore
+.prettierignore
+
 # Logs
 *.log
-npm-debug.log*
 
-node_modules
-*.local
-*.tsbuildinfo
+# Coverage
+coverage/
 
-# Editor directories and files
-.vscode/*
-.idea/
-
+# Public assets
+public/ 
