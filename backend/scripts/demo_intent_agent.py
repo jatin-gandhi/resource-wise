@@ -15,22 +15,23 @@ from app.ai.core.config import AIConfig
 
 async def demo_intent_agent():
     """Demonstrate Intent Agent functionality with key examples."""
-    
+
     print("🚀 ResourceWise Intent Agent Demo")
     print("=" * 50)
     print("This demo shows how the Intent Agent classifies user queries")
     print("and provides standardized output format for seamless integration.")
     print("=" * 50)
-    
-    # Initialize Intent Agent
+
+    # Initialize Intent Agent with proper config
     try:
-        intent_agent = IntentAgent()
+        config = AIConfig(temperature=0.1)  # Low temperature for consistent classification
+        intent_agent = IntentAgent(config)
         print("✅ Intent Agent initialized successfully")
     except Exception as e:
         print(f"❌ Failed to initialize Intent Agent: {e}")
         print("💡 Make sure OPENAI_API_KEY is set in your environment")
         return
-    
+
     # Demo queries
     demo_queries = [
         {
@@ -59,13 +60,13 @@ async def demo_intent_agent():
             "expected": "GENERAL_CONVERSATION with informative response"
         }
     ]
-    
+
     for i, demo in enumerate(demo_queries, 1):
         print(f"\n{'🔍' if 'Database' in demo['name'] else '💬'} Demo {i}: {demo['name']}")
         print(f"Query: \"{demo['query']}\"")
         print(f"Expected: {demo['expected']}")
         print("-" * 50)
-        
+
         try:
             # Prepare input
             input_data = {
@@ -74,41 +75,41 @@ async def demo_intent_agent():
                 "user_id": "demo-user",
                 "metadata": {}
             }
-            
+
             # Process through Intent Agent
             response = await intent_agent.process(input_data)
-            
+
             # Display standardized response
             print("📋 Standardized Response:")
             print(f"   Intent: {response.get('intent', 'Unknown')}")
             print(f"   Success: {response.get('success', 'Unknown')}")
             print(f"   Requires Database: {response.get('requires_database', 'Unknown')}")
             print(f"   Response: {response.get('response', 'No response')[:100]}...")
-            
+
             # Show database-specific details
             if response.get('requires_database'):
                 print(f"\n🗄️  Database Query Details:")
                 print(f"   Query Type: {response.get('query_type', 'Unknown')}")
                 print(f"   SQL Generated: {response.get('sql_query', 'None')[:80]}...")
                 print(f"   Tables: {response.get('tables', 'None')}")
-                
+
                 query_result = response.get('query_result', {})
                 if query_result:
                     print(f"   Query Agent Result: Available ✅")
                 else:
                     print(f"   Query Agent Result: Not available ❌")
-            
+
             # Show error if any
             if response.get('error'):
                 print(f"\n❌ Error: {response.get('error')}")
-                
+
             print("✅ Demo completed successfully")
-            
+
         except Exception as e:
             print(f"❌ Demo failed: {str(e)}")
-        
+
         print()  # Add spacing
-    
+
     print("=" * 50)
     print("🎯 Key Features Demonstrated:")
     print("   ✅ Intent classification (DATABASE_QUERY, GREETING, HELP_REQUEST, etc.)")

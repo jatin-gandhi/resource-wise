@@ -73,14 +73,12 @@ class StandardResponse:
 class IntentAgent(BaseAgent):
     """Agent for classifying user intent and routing to appropriate handlers."""
 
-    def __init__(self, config: AIConfig | None = None):
+    def __init__(self, config: AIConfig):
         """Initialize the intent agent.
 
         Args:
-            config: AI configuration settings. If None, will use default config with settings.
+            config: AI configuration settings. Required - contains API keys and model settings.
         """
-        if config is None:
-            config = AIConfig(temperature=0.1)  # Low temperature for consistent classification
 
         super().__init__(config)
 

@@ -17,11 +17,12 @@ logger = structlog.get_logger()
 class QueryAgent(BaseAgent):
     """Agent for generating database queries."""
 
-    def __init__(self, config: AIConfig | None = None):
+    def __init__(self, config: AIConfig):
         """Initialize the query agent.
 
         Args:
-            config: AI configuration settings. If None, will use default config with settings.
+            config: AI configuration settings. Required - contains API keys and model settings.
+
         """
 
         super().__init__(config)
