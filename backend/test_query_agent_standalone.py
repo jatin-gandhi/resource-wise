@@ -75,7 +75,7 @@ async def test_query_agent_with_raw_input():
 
     # Test each case
     for i, test_case in enumerate(test_cases, 1):
-        print(f"\n{'='*20} Test {i}: {test_case['name']} {'='*20}")
+        print(f"\n{'=' * 20} Test {i}: {test_case['name']} {'=' * 20}")
         print(f"🗣️  Natural Language Query: '{test_case['query']}'")
         print("-" * 80)
 
