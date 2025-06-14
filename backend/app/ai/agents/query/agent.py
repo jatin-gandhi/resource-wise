@@ -39,7 +39,7 @@ class QueryAgent(BaseAgent):
         # Initialize LLM
         self.llm = ChatOpenAI(
             model=self.config.model_name,
-            temperature=0.5,
+            temperature=0.2,
             verbose=settings.DEBUG,
             api_key=self.config.api_key,
         )

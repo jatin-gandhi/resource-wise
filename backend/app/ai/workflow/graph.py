@@ -3,14 +3,13 @@
 from typing import Any
 
 import structlog
-from langgraph.graph import END, StateGraph
-
 from app.ai.agents.intent.agent import IntentAgent
 from app.ai.agents.query.agent import QueryAgent
 from app.ai.agents.response.agent import ResponseAgent
 from app.ai.core.config import AIConfig
 from app.ai.workflow.state import AgentState, AgentStateDict
 from app.services.database_service import database_service
+from langgraph.graph import END, StateGraph
 
 logger = structlog.get_logger()
 
@@ -29,7 +28,7 @@ class AgentWorkflow:
         self.query_agent = QueryAgent(config)
         self.response_agent = ResponseAgent(config)
         self.graph = self._create_graph()
-        logger.info("Initializing AgentWorkflow with Intent, Query, and Response Agents")
+        # logger.info("Initializing AgentWorkflow with Intent, Query, and Response Agents")
 
     def _create_graph(self) -> StateGraph:
         """Create the LangGraph workflow.
@@ -81,11 +80,11 @@ class AgentWorkflow:
             Updated state
         """
         try:
-            logger.info(
-                "Starting intent classification",
-                user_input=state["user_input"],
-                session_id=state["session_id"],
-            )
+            # logger.info(
+            #     "Starting intent classification",
+            #     user_input=state["user_input"],
+            #     session_id=state["session_id"],
+            # )
 
             # Prepare input for intent agent
             input_data = {
@@ -102,12 +101,12 @@ class AgentWorkflow:
             state["current_stage"] = "intent_classified"
             state["query_result"] = result
 
-            logger.info(
-                "Intent classification completed",
-                intent=result.get("intent"),
-                requires_database=result.get("requires_database", False),
-                session_id=state["session_id"],
-            )
+            # logger.info(
+            #     "Intent classification completed",
+            #     intent=result.get("intent"),
+            #     requires_database=result.get("requires_database", False),
+            #     session_id=state["session_id"],
+            # )
 
             return state
 
@@ -143,11 +142,11 @@ class AgentWorkflow:
             Updated state
         """
         try:
-            logger.info(
-                "Starting query generation",
-                user_input=state["user_input"],
-                session_id=state["session_id"],
-            )
+            # logger.info(
+            #     "Starting query generation",
+            #     user_input=state["user_input"],
+            #     session_id=state["session_id"],
+            # )
 
             # Get the intent result from previous step
             intent_result = state["query_result"]
@@ -167,17 +166,17 @@ class AgentWorkflow:
 
             # Store query result for database execution
             state["sql_query"] = query_result.get("query", "")
-            logger.info(f"sql_query: {state['sql_query']}")
+            # logger.info(f"sql_query: {state['sql_query']}")
             state["query_details"] = query_result
             state["current_stage"] = "query_generated"
 
-            logger.info(
-                "Query generation completed",
-                has_sql_query=bool(query_result.get("query")),
-                query_type=query_result.get("query_type", "unknown"),
-                session_id=state["session_id"],
-            )
-            logger.info(f"state: {state}")
+            # logger.info(
+            #     "Query generation completed",
+            #     has_sql_query=bool(query_result.get("query")),
+            #     query_type=query_result.get("query_type", "unknown"),
+            #     session_id=state["session_id"],
+            # )
+            # logger.info(f"state: {state}")
             return state
 
         except Exception as e:
@@ -208,12 +207,12 @@ class AgentWorkflow:
             Updated state with database results
         """
         try:
-            logger.info(
-                "Starting database execution",
-                user_input=state["user_input"],
-                session_id=state["session_id"],
-            )
-            logger.info(f"for DB execution sql_query: {state}")
+            # logger.info(
+            #     "Starting database execution",
+            #     user_input=state["user_input"],
+            #     session_id=state["session_id"],
+            # )
+            # logger.info(f"for DB execution sql_query: {state}")
 
             # Get the SQL query from previous step
             sql_query = state.get("query_details", {}).get("query", "")

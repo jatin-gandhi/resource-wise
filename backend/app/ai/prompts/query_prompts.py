@@ -95,26 +95,70 @@ FUZZY TERM RESOLUTION PRIORITY:
 - For single resolved values, use equality: WHERE column = 'resolved_value'
 - Combine multiple fuzzy term conditions with AND/OR based on query context
 
-STEP 4: APPLY OPERATION-SPECIFIC PATTERNS
+STEP 4: ANALYZE RESOLVED TERMS AND SEPARATE BY TYPE
+
+CRITICAL: When resolved terms contain both skills and roles, you must separate them:
+
+ROLE IDENTIFICATION (Job titles/designations):
+- Contains words like: "Engineer", "Developer", "Manager", "Lead", "Architect", "Designer", "Analyst", "Officer", "Intern"
+- Examples: "Senior Software Engineer", "UX Designer", "Technical Lead", "Project Manager", "Quality Assurance Engineer"
+
+TEAM-RELEVANT ROLE FILTERING:
+- For team queries, be HIGHLY SELECTIVE about which roles are actually relevant to the specific team
+- DESIGN TEAM: "UX Designer", "UI Designer", "Product Designer", "Graphic Designer"
+- QA/TESTING TEAM: "Quality Assurance Engineer", "Senior Quality Assurance Engineer", "Quality Assurance Intern", "Test Engineer"
+- BACKEND TEAM: "Backend Developer", "Backend Engineer", "Senior Backend Developer", "API Developer"
+- FRONTEND TEAM: "Frontend Developer", "Frontend Engineer", "Senior Frontend Developer", "UI Developer"
+- MOBILE TEAM: "Mobile Developer", "iOS Developer", "Android Developer", "Mobile Engineer"
+- DEVOPS TEAM: "DevOps Engineer", "Site Reliability Engineer", "Infrastructure Engineer"
+- DATA TEAM: "Data Engineer", "Data Scientist", "Data Analyst", "ML Engineer"
+
+GENERIC ROLES TO AVOID FOR TEAM QUERIES:
+- Avoid including generic roles like "Software Engineer", "Senior Software Engineer", "Technical Lead", "Software Architect" unless they are specifically mentioned in the team context
+- These generic roles could belong to any team, so they dilute the team-specific results
+
+SKILL IDENTIFICATION (Technical abilities/tools):
+- Programming languages: "Java", "Python", "JavaScript", "React", "Vue", "Angular"
+- Tools/Technologies: "Docker", "AWS", "Figma", "Git", "PostgreSQL", "Jenkins"
+- Frameworks: "Spring Boot", "Django", "Express.js", "Next.js"
+
+SEPARATION STRATEGY:
+- For TEAM queries: Extract ONLY roles from resolved terms, ignore skills completely
+- For SKILL queries: Extract ONLY skills from resolved terms, ignore roles
+- For MIXED queries: Use both roles AND skills with appropriate logic
+
+STEP 5: APPLY OPERATION-SPECIFIC PATTERNS
 
 SELECT PATTERNS:
-1. INTELLIGENT ROLE-BASED FILTERING:
-   - When resolved terms contain job titles/designations, filter by d.title
-   - Use context clues: "team", "members", "people in" suggest role-based filtering
-   - Example: "Give me members of design team" + resolved_terms: {{"design": ["UX Designer"]}}
-     → WHERE d.title = 'UX Designer'
-   - Example: "Show QA team" + resolved_terms: {{"qa": ["Quality Assurance Engineer", "Senior Quality Assurance Engineer"]}}
-     → WHERE d.title IN ('Quality Assurance Engineer', 'Senior Quality Assurance Engineer')
+1. TEAM QUERIES (ROLE-FOCUSED):
+   - Keywords: "team", "members of", "who's on", "people in", "[role] team"
+   - CRITICAL: For team queries, ONLY use job titles/roles from resolved terms, IGNORE skills
+   - CRITICAL: Be SELECTIVE about which roles are relevant to the specific team
+   - Filter EXCLUSIVELY by d.title using ONLY team-relevant roles from resolved values
+   
+   TEAM-SPECIFIC ROLE FILTERING:
+   - "design team" → ONLY roles related to design: "UX Designer", "UI Designer", "Product Designer"
+   - "QA team" → ONLY roles related to testing: "Quality Assurance Engineer", "Senior Quality Assurance Engineer", "Quality Assurance Intern"  
+   - "backend team" → ONLY roles related to backend: "Backend Developer", "Senior Backend Developer", "Backend Engineer"
+   - "frontend team" → ONLY roles related to frontend: "Frontend Developer", "Senior Frontend Developer", "Frontend Engineer"
+   - "mobile team" → ONLY roles related to mobile: "Mobile Developer", "iOS Developer", "Android Developer"
+   
+   DO NOT include generic roles like "Software Engineer", "Senior Software Engineer", "Technical Lead" unless they are specifically relevant to the team context.
+   
+   - Example: "Give me members of design team" + resolved_terms: {{"design team": ["Figma", "HTML/CSS", "UX Designer", "Software Architect", "Senior Software Engineer"]}}
+     → Extract ONLY design-relevant roles: ["UX Designer"] → WHERE d.title = 'UX Designer'
+   - Example: "Show QA team" + resolved_terms: {{"QA team": ["TestNG", "Quality Assurance Engineer", "Senior Quality Assurance Engineer", "Software Engineer"]}}
+     → Extract ONLY QA-relevant roles: ["Quality Assurance Engineer", "Senior Quality Assurance Engineer"] → WHERE d.title IN ('Quality Assurance Engineer', 'Senior Quality Assurance Engineer')
 
-2. INTELLIGENT SKILL-BASED FILTERING:
-   - When resolved terms contain technical skills, filter by es.skill_name
-   - Use context clues: "with skills", "expertise in", "who knows" suggest skill-based filtering
+2. SKILL QUERIES (SKILL-FOCUSED):
+   - Keywords: "with skills", "expertise in", "who knows", "experienced in"
+   - Filter by es.skill_name using skill-related resolved values
    - Example: "Find React experts" + resolved_terms: {{"react": ["React"]}}
      → WHERE es.skill_name = 'React'
    - Example: "Developers with frontend skills" + resolved_terms: {{"frontend": ["React", "Vue", "Angular"]}}
      → WHERE es.skill_name IN ('React', 'Vue', 'Angular')
 
-3. INTELLIGENT MIXED FILTERING:
+3. MIXED QUERIES (BOTH ROLES AND SKILLS):
    - When multiple fuzzy terms are resolved, combine conditions appropriately
    - Example: "Find senior frontend developers" + resolved_terms: {{"senior": ["Senior Software Engineer"], "frontend": ["React", "Vue"]}}
      → WHERE d.title = 'Senior Software Engineer' AND es.skill_name IN ('React', 'Vue')
@@ -125,6 +169,49 @@ SELECT PATTERNS:
    - CRITICAL: Use CAST(a.percent_allocated AS INTEGER) for SUM operations
    - For overallocation queries: SUM(CAST(a.percent_allocated AS INTEGER)) > 100
    - For available employees: SUM(CAST(a.percent_allocated AS INTEGER)) < 100
+
+5. AVAILABILITY QUERIES:
+   - "available", "who is available", "free" → Filter employees with total allocation < 100%
+   
+   PARTIAL AVAILABILITY LOGIC:
+   - "available at least X%" means "allocated at most (100-X)%"
+   - "available at least 25%" → allocated ≤ 75% → HAVING SUM(percent_allocated) <= 75
+   - "available at least 50%" → allocated ≤ 50% → HAVING SUM(percent_allocated) <= 50
+   - "available 100%" → allocated = 0% → completely unallocated
+   
+   - CURRENT AVAILABILITY: Use subquery to calculate total allocation per employee:
+     ```sql
+     WHERE e.id NOT IN (
+       SELECT a.employee_id 
+       FROM allocations a 
+       WHERE a.status = 'active' 
+       GROUP BY a.employee_id 
+       HAVING SUM(CAST(a.percent_allocated AS INTEGER)) >= 100
+     )
+     ```
+   - FUTURE AVAILABILITY: For "next month", "next week", etc., check if employee has NO allocations during that future period:
+     ```sql
+     WHERE e.id NOT IN (
+       SELECT a.employee_id 
+       FROM allocations a 
+       WHERE a.status = 'active' 
+       AND a.start_date <= (CURRENT_DATE + INTERVAL '1 month')
+       AND a.end_date >= CURRENT_DATE + INTERVAL '1 month'
+     )
+     ```
+   - For "available 100%" queries, check if employee is completely unallocated during the period
+   - For partial availability like "available at least 25%", use HAVING SUM(percent_allocated) <= (100 - 25) = 75
+   - "Available at least X%" means "allocated at most (100-X)%"
+   - When showing current allocations, use SUM(percent_allocated) to get total allocation per employee
+   
+   ALLOCATION DISPLAY QUERIES:
+   - "with their current allocation", "show allocation" → Use LEFT JOIN and GROUP BY with SUM()
+   - Use COALESCE(SUM(percent_allocated), 0) to handle employees with no allocations
+   - Always GROUP BY employee fields when using SUM() for allocations
+   - Use LEFT JOIN allocations (not INNER JOIN) to include unallocated employees
+   
+   - CRITICAL: Never use aggregate functions like SUM() in WHERE clause - always use HAVING with GROUP BY
+   - Always include `e.is_active = TRUE` for active employees only
 
 5. PROJECT QUERIES:
    - Use projects.status for filtering active/completed projects  
@@ -141,6 +228,7 @@ SELECT PATTERNS:
    - Join employees + designations + employee_skills for complex filtering
    - Use resolved designation values: WHERE d.title IN (resolved_designations)
    - Use resolved skill values: WHERE es.skill_name IN (resolved_skills)
+   - CRITICAL: Always use SELECT DISTINCT when joining with employee_skills to avoid duplicate employees
    - Consider using LIMIT for "find couple of" or "find 3" type requests
 
 INSERT PATTERNS:
@@ -163,17 +251,46 @@ DELETE PATTERNS:
 
 FUZZY QUERY EXAMPLES:
 
-Example 1 - Simple Fuzzy Resolution:
-User Query: "Find SSE with React skills"
-Resolved Terms: {{"SSE": ["Senior Software Engineer"]}}
-SQL: SELECT e.name, d.title FROM employees e JOIN designations d ON e.designation_id = d.id JOIN employee_skills es ON e.id = es.employee_id WHERE d.title = 'Senior Software Engineer' AND es.skill_name = 'React';
+Example 1 - Team Query (Role-focused):
+User Query: "Give me members of design team"
+Resolved Terms: {{"design team": ["Figma", "HTML/CSS", "UX Designer", "Software Architect", "Technical Lead", "Senior Software Engineer"]}}
+Analysis: TEAM query → Extract ONLY design-relevant roles: ["UX Designer"] (ignore generic roles like "Software Architect", "Technical Lead", "Senior Software Engineer")
+SQL: SELECT e.name, d.title FROM employees e JOIN designations d ON e.designation_id = d.id WHERE d.title = 'UX Designer';
 
-Example 2 - Multiple Fuzzy Terms:
-User Query: "Show senior frontend developers"
+Example 2 - Skill Query (Skill-focused):
+User Query: "Find developers with React experience"
+Resolved Terms: {{"developers": ["React", "JavaScript", "Senior Software Engineer", "Software Engineer"]}}
+Analysis: SKILL query → Extract ONLY skills: ["React", "JavaScript"]
+SQL: SELECT DISTINCT e.name, d.title FROM employees e JOIN designations d ON e.designation_id = d.id JOIN employee_skills es ON e.id = es.employee_id WHERE es.skill_name IN ('React', 'JavaScript');
+
+Example 3 - Mixed Query (Both roles and skills):
+User Query: "Find senior frontend developers"
 Resolved Terms: {{"senior": ["Senior Software Engineer"], "frontend": ["React", "Vue", "Angular"]}}
-SQL: SELECT e.name, d.title FROM employees e JOIN designations d ON e.designation_id = d.id JOIN employee_skills es ON e.id = es.employee_id WHERE d.title = 'Senior Software Engineer' AND es.skill_name IN ('React', 'Vue', 'Angular');
+Analysis: MIXED query → Use roles: ["Senior Software Engineer"] AND skills: ["React", "Vue", "Angular"]
+SQL: SELECT DISTINCT e.name, d.title FROM employees e JOIN designations d ON e.designation_id = d.id JOIN employee_skills es ON e.id = es.employee_id WHERE d.title = 'Senior Software Engineer' AND es.skill_name IN ('React', 'Vue', 'Angular');
 
-Example 3 - Complex Fuzzy Query:
+Example 4 - Current Availability Query:
+User Query: "Give me SSE who is available with backend skills"
+Resolved Terms: {{"SSE": ["Senior Software Engineer"], "backend": ["Java", "Python", "Node.js"]}}
+Analysis: MIXED query with CURRENT AVAILABILITY → Use roles + skills + current availability check
+SQL: SELECT DISTINCT e.name, d.title FROM employees e JOIN designations d ON e.designation_id = d.id JOIN employee_skills es ON e.id = es.employee_id WHERE d.title = 'Senior Software Engineer' AND es.skill_name IN ('Java', 'Python', 'Node.js') AND e.is_active = TRUE AND e.id NOT IN (SELECT a.employee_id FROM allocations a WHERE a.status = 'active' GROUP BY a.employee_id HAVING SUM(CAST(a.percent_allocated AS INTEGER)) >= 100);
+
+Example 5 - Future 100% Availability Query:
+User Query: "Is Tyler available 100% for next month?"
+Analysis: FUTURE AVAILABILITY query → Check if Tyler has NO allocations during next month period
+SQL: SELECT e.name, e.email FROM employees e WHERE e.name = 'Tyler' AND e.is_active = TRUE AND e.id NOT IN (SELECT a.employee_id FROM allocations a WHERE a.status = 'active' AND a.start_date <= (CURRENT_DATE + INTERVAL '1 month') AND a.end_date >= (CURRENT_DATE + INTERVAL '1 month'));
+
+Example 6 - Current Partial Availability with Allocation Display:
+User Query: "Give me TLs who are available at least 25% along with their current allocation"
+Analysis: PARTIAL AVAILABILITY + ALLOCATION DISPLAY → Show TLs allocated ≤ 75% with their total allocation
+SQL: SELECT e.name, d.title, COALESCE(SUM(CAST(a.percent_allocated AS INTEGER)), 0) as total_allocation FROM employees e JOIN designations d ON e.designation_id = d.id LEFT JOIN allocations a ON e.id = a.employee_id AND a.status = 'active' WHERE d.title = 'Technical Lead' AND e.is_active = TRUE GROUP BY e.id, e.name, d.title HAVING COALESCE(SUM(CAST(a.percent_allocated AS INTEGER)), 0) <= 75;
+
+Example 7 - Future Partial Availability Query:
+User Query: "Who is available at least 50% next week?"
+Analysis: FUTURE PARTIAL AVAILABILITY → Check employees with ≤ 50% allocation next week
+SQL: SELECT e.name, e.email FROM employees e WHERE e.is_active = TRUE AND e.id NOT IN (SELECT a.employee_id FROM allocations a WHERE a.status = 'active' AND a.start_date <= (CURRENT_DATE + INTERVAL '1 week') AND a.end_date >= (CURRENT_DATE + INTERVAL '1 week') GROUP BY a.employee_id HAVING SUM(CAST(a.percent_allocated AS INTEGER)) > 50);
+
+Example 8 - Complex Project Query:
 User Query: "Find experienced backend engineers working on customer projects"
 Resolved Terms: {{"experienced": ["Senior Software Engineer", "Technical Lead"], "backend": ["Java", "Python", "Node.js"]}}
 SQL: SELECT DISTINCT e.name, d.title, p.project_name FROM employees e JOIN designations d ON e.designation_id = d.id JOIN employee_skills es ON e.id = es.employee_id JOIN allocations a ON e.id = a.employee_id JOIN projects p ON a.project_id = p.id WHERE d.title IN ('Senior Software Engineer', 'Technical Lead') AND es.skill_name IN ('Java', 'Python', 'Node.js') AND p.project_type = 'customer' AND a.status = 'active';
@@ -221,6 +338,15 @@ FUZZY TERM VALIDATION:
 - Check that equality conditions are used for single resolved values
 - Confirm that fuzzy term resolution takes priority over literal text matching
 
+CRITICAL TEAM QUERY VALIDATION:
+- For TEAM queries (containing "team", "members of", "who's on"), validate that ONLY team-relevant roles are used
+- DESIGN TEAM: Only "UX Designer", "UI Designer", "Product Designer" - NOT generic roles
+- QA TEAM: Only "Quality Assurance Engineer", "Senior Quality Assurance Engineer", "Quality Assurance Intern"
+- BACKEND TEAM: Only "Backend Developer", "Backend Engineer", "Senior Backend Developer" - NOT skills like "Java", "Python"
+- DO NOT "correct" team queries by adding generic roles like "Software Engineer", "Senior Software Engineer", "Technical Lead"
+- DO NOT use skills (programming languages, tools) as job titles in d.title conditions
+- If the original query correctly filters by specific team roles, DO NOT expand it to include all resolved terms
+
 COMMON ISSUES TO FIX:
 - Non-existent table or column names
 - Incorrect JOIN conditions
@@ -229,6 +355,11 @@ COMMON ISSUES TO FIX:
 - Inefficient query patterns
 - Incorrect use of resolved fuzzy terms
 - Missing IN clauses for multiple resolved values
+- Missing DISTINCT when joining with employee_skills (causes duplicate employees)
+- Incorrect availability logic (should be simple allocation < 100% check)
+- Using skills as job titles in d.title conditions
+- CRITICAL: Aggregate functions (SUM, COUNT, etc.) in WHERE clause - must use HAVING with GROUP BY instead
+- Future availability queries with incorrect date logic
 
 RESPONSE FORMAT:
 Return ONLY the corrected SQL query without any explanation, analysis, or markdown formatting.

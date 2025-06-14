@@ -188,7 +188,7 @@ class SkillCategoryConfig:
 
     # Configuration settings
     SETTINGS = {
-        "max_results_per_category": 20,
+        "max_results_per_category": 10,
         "enable_vector_fallback": True,
         "vector_similarity_threshold": 0.2,
     }
