@@ -11,6 +11,7 @@ from app.core.config import settings
 
 logger = structlog.get_logger()
 
+
 class DatabaseService:
     """Service for secure database operations."""
 
