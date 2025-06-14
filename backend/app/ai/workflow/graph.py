@@ -7,10 +7,10 @@ from langgraph.graph import END, StateGraph
 
 from app.ai.agents.intent.agent import IntentAgent
 from app.ai.agents.query.agent import QueryAgent
+from app.ai.agents.response.agent import ResponseAgent
 from app.ai.core.config import AIConfig
 from app.ai.workflow.state import AgentState, AgentStateDict
-from app.services.database import db_service
-from app.services.response_formatter import response_formatter
+from app.services.database_service import database_service
 
 logger = structlog.get_logger()
 
@@ -27,8 +27,9 @@ class AgentWorkflow:
         self.config = config
         self.intent_agent = IntentAgent(config)
         self.query_agent = QueryAgent(config)
+        self.response_agent = ResponseAgent(config)
         self.graph = self._create_graph()
-        logger.info("Initializing AgentWorkflow with Intent and Query Agents")
+        logger.info("Initializing AgentWorkflow with Intent, Query, and Response Agents")
 
     def _create_graph(self) -> StateGraph:
         """Create the LangGraph workflow.
@@ -43,7 +44,7 @@ class AgentWorkflow:
         workflow.add_node("intent_classification", self._intent_classification)
         workflow.add_node("query_generation", self._query_generation)
         workflow.add_node("database_execution", self._database_execution)
-        workflow.add_node("response_formatting", self._response_formatting)
+        workflow.add_node("response_generation", self._response_generation)
 
         # Define conditional routing function
         def route_after_intent(state: AgentStateDict) -> str:
@@ -60,10 +61,10 @@ class AgentWorkflow:
             {"query_generation": "query_generation", END: END},
         )
 
-        # Database workflow: Query -> Execute -> Format -> End
+        # Database workflow: Query -> Execute -> Generate Response -> End
         workflow.add_edge("query_generation", "database_execution")
-        workflow.add_edge("database_execution", "response_formatting")
-        workflow.add_edge("response_formatting", END)
+        workflow.add_edge("database_execution", "response_generation")
+        workflow.add_edge("response_generation", END)
 
         # Set entry point
         workflow.set_entry_point("intent_classification")
@@ -133,7 +134,7 @@ class AgentWorkflow:
             return state
 
     async def _query_generation(self, state: AgentStateDict) -> AgentStateDict:
-        """Process database query generation and execution.
+        """Process database query generation.
 
         Args:
             state: Current workflow state
@@ -153,48 +154,30 @@ class AgentWorkflow:
             if not intent_result:
                 raise ValueError("No intent classification result available")
 
-            # Prepare input for query agent using intent metadata
+            # Prepare input for query agent using raw natural language
             input_data = {
                 "query": state["user_input"],
                 "session_id": state["session_id"],
                 "user_id": state["context"].get("user_id"),
-                "metadata": intent_result.get("metadata", {}),
+                "metadata": {},  # Query agent handles parameter extraction internally
             }
 
             # Process through query agent
             query_result = await self.query_agent.process(input_data)
 
-            # Combine intent and query results
-            final_result = {
-                **intent_result,  # Keep intent classification info
-                "query_details": query_result,  # Add query generation details
-                "sql_query": query_result.get("query", ""),
-                "query_parameters": query_result.get("parameters", {}),
-                "tables_used": query_result.get("tables", []),
-            }
-
-            # Update the response to include query information
-            if query_result.get("query"):
-                response_parts = [
-                    intent_result.get("response", ""),
-                    f"\n\nGenerated SQL Query:\n```sql\n{query_result['query']}\n```",
-                ]
-                if query_result.get("parameters"):
-                    response_parts.append(f"\nQuery Parameters: {query_result['parameters']}")
-
-                final_result["response"] = "\n".join(response_parts).strip()
-
-            # Update state with combined results
-            state["current_stage"] = "completed"
-            state["query_result"] = final_result
+            # Store query result for database execution
+            state["sql_query"] = query_result.get("query", "")
+            logger.info(f"sql_query: {state['sql_query']}")
+            state["query_details"] = query_result
+            state["current_stage"] = "query_generated"
 
             logger.info(
                 "Query generation completed",
                 has_sql_query=bool(query_result.get("query")),
-                tables_used=query_result.get("tables", []),
+                query_type=query_result.get("query_type", "unknown"),
                 session_id=state["session_id"],
             )
-
+            logger.info(f"state: {state}")
             return state
 
         except Exception as e:
@@ -207,25 +190,11 @@ class AgentWorkflow:
                 exc_info=True,
             )
 
-            # Preserve intent result but add error info
-            if state["query_result"]:
-                state["query_result"].update(
-                    {
-                        "query_error": str(e),
-                        "response": state["query_result"].get("response", "")
-                        + f"\n\nNote: I encountered an error generating the database query: {str(e)}",
-                    }
-                )
-            else:
-                state["query_result"] = {
-                    "intent": "database_query",
-                    "response": "I apologize, but I encountered an error generating your database query. Please try rephrasing your request.",
-                    "error": str(e),
-                    "requires_database": True,
-                }
-
-            state["current_stage"] = "completed_with_error"
+            # Set error state but continue to response generation for error handling
+            state["current_stage"] = "query_error"
             state["error"] = str(e)
+            state["sql_query"] = ""
+            state["query_details"] = {"error": str(e)}
 
             return state
 
@@ -244,22 +213,18 @@ class AgentWorkflow:
                 user_input=state["user_input"],
                 session_id=state["session_id"],
             )
+            logger.info(f"for DB execution sql_query: {state}")
 
-            # Get the query result from previous step
-            query_result = state["query_result"]
-            if not query_result:
-                raise ValueError("No query generation result available")
-
-            # Extract SQL query
-            sql_query = query_result.get("sql_query", "")
+            # Get the SQL query from previous step
+            sql_query = state.get("query_details", {}).get("query", "")
             if not sql_query:
-                raise ValueError("No SQL query found in query generation result")
+                raise ValueError("No SQL query found for database execution")
 
-            # Execute the query
-            db_result = await db_service.execute_query(sql_query)
+            # Execute the query using our database service
+            db_result = await database_service.execute_query(sql_query)
 
-            # Update state with database results
-            state["query_result"]["database_result"] = db_result
+            # Store database results
+            state["database_result"] = db_result
             state["current_stage"] = "database_executed"
 
             logger.info(
@@ -282,92 +247,79 @@ class AgentWorkflow:
                 exc_info=True,
             )
 
-            # Add database error to state
-            if state["query_result"]:
-                state["query_result"]["database_result"] = {
-                    "success": False,
-                    "error": str(e),
-                    "error_type": "EXECUTION_ERROR",
-                    "data": [],
-                    "columns": [],
-                    "row_count": 0,
-                    "execution_time": 0,
-                }
-
+            # Store database error but continue to response generation
             state["current_stage"] = "database_error"
             state["error"] = str(e)
+            state["database_result"] = {
+                "success": False,
+                "error": str(e),
+                "error_type": "EXECUTION_ERROR",
+                "db_results": [],
+                "execution_time": 0,
+            }
 
             return state
 
-    async def _response_formatting(self, state: AgentStateDict) -> AgentStateDict:
-        """Format the database results into user-friendly response.
+    async def _response_generation(self, state: AgentStateDict) -> AgentStateDict:
+        """Generate natural language response using Response Agent.
 
         Args:
             state: Current workflow state
 
         Returns:
-            Updated state with formatted response
+            Updated state with natural language response
         """
         try:
             logger.info(
-                "Starting response formatting",
+                "Starting response generation",
                 user_input=state["user_input"],
                 session_id=state["session_id"],
             )
 
-            # Get the query and database results
-            query_result = state["query_result"]
-            if not query_result:
-                raise ValueError("No query result available")
-
-            db_result = query_result.get("database_result")
-            if not db_result:
-                raise ValueError("No database result available")
-
-            # Prepare context for formatting
-            query_context = {
-                "query_type": query_result.get("query_details", {}).get("query_type", "unknown"),
-                "intent": query_result.get("intent", "database_query"),
-                "parameters": query_result.get("query_parameters", {}),
-                "tables_used": query_result.get("tables_used", []),
-            }
-
-            # Format the response
-            formatted_response = await response_formatter.format_database_response(
-                query_result=db_result,
-                query_context=query_context,
-                original_query=state["user_input"],
-            )
-
-            # Update the final response
-            final_response = {
-                **query_result,  # Keep all previous data
-                "response": formatted_response.get("response", ""),
-                "formatted_data": formatted_response.get("formatted_data"),
-                "summary": formatted_response.get("summary", ""),
-                "success": formatted_response.get("success", True),
-                "metadata": {
-                    **query_result.get("metadata", {}),
-                    **formatted_response.get("metadata", {}),
+            # Prepare input for Response Agent
+            query_details = state.get("query_details", {})
+            db_result = state.get("database_result", {})
+            
+            response_input = {
+                "db_results": db_result.get("db_results", []),
+                "original_query": state["user_input"],
+                "query_context": {
+                    **query_details,  # SQL generation context
+                    **db_result,      # Database execution context
                 },
+                "user_id": state["context"].get("user_id"),
+                "session_id": state["session_id"],
+                "success": db_result.get("success", False),
+                "error": state.get("error") or db_result.get("error"),
+                "error_type": db_result.get("error_type"),
             }
 
-            # If formatting failed, provide fallback response
-            if not formatted_response.get("success", True):
-                fallback_msg = "I successfully retrieved the data from the database, but encountered an issue formatting the response."
-                if db_result.get("success", False) and db_result.get("row_count", 0) > 0:
-                    fallback_msg += f" Found {db_result['row_count']} result{'s' if db_result['row_count'] != 1 else ''}."
+            # Generate natural language response
+            response_result = await self.response_agent.process(response_input)
 
-                final_response["response"] = fallback_msg
+            # Update the final query result with natural language response
+            final_result = {
+                **state.get("query_result", {}),  # Keep intent classification
+                "response": response_result.get("response", ""),
+                "success": response_result.get("success", True),
+                "result_count": response_result.get("result_count", 0),
+                "sql_query": state.get("query_details", {}).get("query", ""),
+                "query_type": query_details.get("query_type", "unknown"),
+                "tables_used": query_details.get("tables", []),
+                "execution_time": db_result.get("execution_time", 0),
+                "metadata": {
+                    **state.get("query_result", {}).get("metadata", {}),
+                    **response_result.get("metadata", {}),
+                }
+            }
 
-            # Update state
-            state["query_result"] = final_response
+            state["query_result"] = final_result
             state["current_stage"] = "completed"
 
             logger.info(
-                "Response formatting completed",
-                success=formatted_response.get("success", True),
-                format_type=formatted_response.get("metadata", {}).get("format", "unknown"),
+                "Response generation completed",
+                success=response_result.get("success", True),
+                response_length=len(response_result.get("response", "")),
                 session_id=state["session_id"],
             )
 
@@ -375,7 +327,7 @@ class AgentWorkflow:
 
         except Exception as e:
             logger.error(
-                "Error in response formatting",
+                "Error in response generation",
                 error=str(e),
                 error_type=type(e).__name__,
                 user_input=state["user_input"],
@@ -384,17 +336,21 @@ class AgentWorkflow:
             )
 
             # Provide fallback response
-            if state["query_result"] and state["query_result"].get("database_result", {}).get(
-                "success", False
-            ):
-                db_result = state["query_result"]["database_result"]
-                fallback_response = f"I successfully retrieved {db_result.get('row_count', 0)} result{'s' if db_result.get('row_count', 0) != 1 else ''} from the database, but encountered an error formatting the response."
-                state["query_result"]["response"] = fallback_response
+            db_result = state.get("database_result", {})
+            if db_result.get("success", False) and db_result.get("row_count", 0) > 0:
+                fallback_response = f"I successfully retrieved {db_result['row_count']} result{'s' if db_result['row_count'] != 1 else ''} from the database, but encountered an error generating the response."
             else:
-                state["query_result"]["response"] = (
-                    "I encountered an error processing your database query."
-                )
+                fallback_response = "I encountered an error processing your database query."
 
+            # Update final result with fallback
+            final_result = {
+                **state.get("query_result", {}),
+                "response": fallback_response,
+                "success": False,
+                "error": str(e),
+            }
+
+            state["query_result"] = final_result
             state["current_stage"] = "completed_with_error"
             state["error"] = str(e)
 

@@ -5,7 +5,6 @@ from typing import Any
 
 import structlog
 from app.ai.agents.base import BaseAgent
-from app.ai.agents.query.agent import QueryAgent, QueryType  # Import QueryType from query agent
 from app.ai.core.config import AIConfig
 from app.core.config import settings
 from app.schemas.ai import QueryRequest
@@ -25,53 +24,8 @@ class IntentType(str, Enum):
     UNKNOWN = "unknown"  # Unable to determine intent
 
 
-class StandardResponse:
-    """Standardized response format for all intent types."""
-
-    def __init__(
-        self,
-        intent: IntentType,
-        response: str,
-        requires_database: bool = False,
-        success: bool = True,
-        metadata: dict[str, Any] | None = None,
-        error: str | None = None,
-        **kwargs,
-    ):
-        self.intent = intent
-        self.response = response
-        self.requires_database = requires_database
-        self.success = success
-        self.metadata = metadata or {}
-        self.error = error
-
-        # Add any additional fields
-        for key, value in kwargs.items():
-            setattr(self, key, value)
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary format."""
-        result = {
-            "intent": self.intent,
-            "response": self.response,
-            "requires_database": self.requires_database,
-            "success": self.success,
-            "metadata": self.metadata,
-        }
-
-        if self.error:
-            result["error"] = self.error
-
-        # Add any additional attributes
-        for key, value in self.__dict__.items():
-            if key not in result:
-                result[key] = value
-
-        return result
-
-
 class IntentAgent(BaseAgent):
-    """Agent for classifying user intent and routing to appropriate handlers."""
+    """Agent for classifying user intent only. Orchestration is handled by the workflow graph."""
 
     def __init__(self, config: AIConfig):
         """Initialize the intent agent.
@@ -79,19 +33,16 @@ class IntentAgent(BaseAgent):
         Args:
             config: AI configuration settings. Required - contains API keys and model settings.
         """
-
         super().__init__(config)
 
-        # Initialize LLM for intent classification
+        # Initialize LLM for intent classification using config values
+        # Note: api_key will be automatically picked up from OPENAI_API_KEY env var
         self.llm = ChatOpenAI(
             model=self.config.model_name,
-            temperature=self.config.temperature,
+            temperature=0.1,  # Low temperature for consistent classification
             verbose=settings.DEBUG,
             api_key=self.config.api_key,
         )
-
-        # Initialize query agent for database operations
-        self.query_agent = QueryAgent(config)
 
         # Intent classification prompt
         self.intent_classification_prompt = PromptTemplate(
@@ -132,64 +83,6 @@ Return ONLY the intent category (DATABASE_QUERY, GENERAL_CONVERSATION, GREETING,
 Intent:""",
         )
 
-        # Enhanced query extraction prompt for database queries
-        self.query_extraction_prompt = PromptTemplate(
-            input_variables=["user_input"],
-            template="""Extract detailed query parameters from the user's database query request for ResourceWise system.
-
-User Input: "{user_input}"
-
-Analyze the input and extract:
-
-1. **Query Type** (choose most appropriate):
-   - resource_search: Finding employees/people, availability, capacity
-   - skill_search: Finding by skills, expertise, technologies
-   - department_search: Finding by department, team, organizational structure
-   - analytics: Reporting, analysis, metrics, summaries, overallocation, project details
-
-2. **Entities**: Specific names, emails, projects, skills, departments mentioned
-
-3. **Filters**: Specific conditions, criteria, or constraints
-   - emails, names, designations, project status, allocation percentages
-   - availability thresholds, date ranges, skills
-
-4. **Analysis Type**: For analytics queries
-   - overallocation, team_composition, project_summary, availability_analysis
-
-5. **Output Requirements**: Specific columns, information requested
-   - project details, employee info, allocation percentages, timelines
-
-6. **Constraints**: Limits, sorting, ordering preferences
-
-EXAMPLES:
-- "Find allocation of james.wilson@techvantage.io" → resource_search with email filter
-- "Show overallocated employees" → analytics with overallocation analysis
-- "Get all Software Engineers" → resource_search with designation filter
-- "Projects with timelines ordered by start date" → analytics with project_summary and ordering
-
-RESPONSE FORMAT - Return as JSON:
-{{
-    "query_type": "resource_search|skill_search|department_search|analytics",
-    "entities": ["list", "of", "specific", "entities"],
-    "filters": {{
-        "email": "specific_email",
-        "designation": "role_name",
-        "project_status": "active|completed|planning",
-        "availability_threshold": 75,
-        "skills": ["python", "java"]
-    }},
-    "analysis_type": "overallocation|team_composition|project_summary|availability_analysis",
-    "columns": ["specific", "columns", "requested"],
-    "include_details": true,
-    "include_assignments": true,
-    "order_by": "field_name",
-    "limit": 50,
-    "threshold": 100
-}}
-
-JSON Response:""",
-        )
-
         # General response prompt for non-database queries
         self.general_response_prompt = PromptTemplate(
             input_variables=["user_input", "intent_type", "context"],
@@ -223,11 +116,10 @@ Response:""",
 
         # Initialize chains
         self.classification_chain = self.intent_classification_prompt | self.llm
-        self.extraction_chain = self.query_extraction_prompt | self.llm
         self.response_chain = self.general_response_prompt | self.llm
 
     async def process(self, input_data: dict[str, Any]) -> dict[str, Any]:
-        """Process user input to determine intent and route accordingly.
+        """Process user input to classify intent and generate appropriate response.
 
         Args:
             input_data: Input data containing user query
@@ -240,9 +132,11 @@ Response:""",
                 }
 
         Returns:
-            Standardized dictionary containing the response based on intent
+            Dictionary containing intent classification and response
         """
-        logger.info("[INTENT-AGENT] Received request", input_data=input_data, agent_type="intent")
+        logger.info("[INTENT-AGENT] Received request", 
+                   input_data=input_data, 
+                   agent_type="intent")
 
         try:
             # Parse and validate input data
@@ -261,11 +155,33 @@ Response:""",
                 agent_type="intent",
             )
 
-            # Route based on intent
-            if intent_type == IntentType.DATABASE_QUERY:
-                return await self._handle_database_query(request)
+            # Determine if this requires database access
+            requires_database = intent_type == IntentType.DATABASE_QUERY
+
+            # For non-database queries, generate response directly
+            if not requires_database:
+                response = await self._generate_general_response(request, intent_type, context_str)
+                return {
+                    "intent": intent_type,
+                    "response": response,
+                    "requires_database": False,
+                    "success": True,
+                    "agent_type": "intent",
+                }
             else:
-                return await self._handle_general_response(request, intent_type, context_str)
+                # For database queries, just return intent - workflow will handle the rest
+                return {
+                    "intent": intent_type,
+                    "response": "I'll help you search the database for that information.",
+                    "requires_database": True,
+                    "success": True,
+                    "agent_type": "intent",
+                    "metadata": {
+                        "original_query": request.query,
+                        "session_id": request.session_id,
+                        "user_id": request.user_id,
+                    }
+                }
 
         except Exception as e:
             logger.error(
@@ -275,13 +191,14 @@ Response:""",
                 agent_type="intent",
             )
 
-            error_response = StandardResponse(
-                intent=IntentType.UNKNOWN,
-                response="I apologize, but I encountered an error processing your request. Please try again.",
-                success=False,
-                error=str(e),
-            )
-            return error_response.to_dict()
+            return {
+                "intent": IntentType.UNKNOWN,
+                "response": "I apologize, but I encountered an error processing your request. Please try again.",
+                "requires_database": False,
+                "success": False,
+                "error": str(e),
+                "agent_type": "intent",
+            }
 
     async def _classify_intent(self, user_input: str, context: str) -> IntentType:
         """Classify the user's intent.
@@ -308,83 +225,30 @@ Response:""",
                 "UNKNOWN": IntentType.UNKNOWN,
             }
 
-            return intent_mapping.get(intent_str, IntentType.UNKNOWN)
+            classified_intent = intent_mapping.get(intent_str, IntentType.UNKNOWN)
+            
+            logger.info(
+                "[INTENT-AGENT] Intent classification result",
+                raw_response=intent_str,
+                classified_intent=classified_intent,
+                agent_type="intent",
+            )
+
+            return classified_intent
 
         except Exception as e:
             logger.error(
-                "[INTENT-AGENT] Error classifying intent", error=str(e), user_input=user_input
+                "[INTENT-AGENT] Error classifying intent", 
+                error=str(e), 
+                user_input=user_input,
+                agent_type="intent",
             )
             return IntentType.UNKNOWN
 
-    async def _handle_database_query(self, request: QueryRequest) -> dict[str, Any]:
-        """Handle database query intent by routing to query agent.
-
-        Args:
-            request: Original query request
-
-        Returns:
-            Standardized response with query agent result
-        """
-        try:
-            # Extract enhanced query parameters
-            query_params = await self._extract_query_parameters(request.query)
-
-            # Prepare input for query agent in the exact format it expects
-            query_input = {
-                "query": request.query,
-                "session_id": request.session_id,
-                "user_id": request.user_id,
-                "metadata": query_params,  # This contains query_type and all other parameters
-            }
-
-            # Process through query agent
-            query_result = await self.query_agent.process(query_input)
-
-            # Check if query agent returned an error
-            if "error" in query_result and query_result["error"]:
-                error_response = StandardResponse(
-                    intent=IntentType.DATABASE_QUERY,
-                    response=f"I encountered an error generating your database query: {query_result['error']}",
-                    requires_database=True,
-                    success=False,
-                    error=query_result["error"],
-                    query_type=query_params.get("query_type", "unknown"),
-                )
-                return error_response.to_dict()
-
-            # Return standardized successful response
-            success_response = StandardResponse(
-                intent=IntentType.DATABASE_QUERY,
-                response="I've successfully generated a database query for your request.",
-                requires_database=True,
-                success=True,
-                query_result=query_result,  # Complete query agent result
-                query_type=query_result.get("query_type", "unknown"),
-                sql_query=query_result.get("query", ""),
-                tables=query_result.get("tables", []),
-                filters=query_result.get("filters", ""),
-                metadata=query_params,
-            )
-            return success_response.to_dict()
-
-        except Exception as e:
-            logger.error(
-                "[INTENT-AGENT] Error handling database query", error=str(e), query=request.query
-            )
-
-            error_response = StandardResponse(
-                intent=IntentType.DATABASE_QUERY,
-                response="I understand you want to query the database, but I encountered an error processing your request.",
-                requires_database=True,
-                success=False,
-                error=str(e),
-            )
-            return error_response.to_dict()
-
-    async def _handle_general_response(
+    async def _generate_general_response(
         self, request: QueryRequest, intent_type: IntentType, context: str
-    ) -> dict[str, Any]:
-        """Handle general conversation intent.
+    ) -> str:
+        """Generate response for non-database queries.
 
         Args:
             request: Original query request
@@ -392,7 +256,7 @@ Response:""",
             context: Conversation context
 
         Returns:
-            Standardized general response
+            Generated response string
         """
         try:
             chain_input = {
@@ -404,14 +268,21 @@ Response:""",
             result = await self.response_chain.ainvoke(chain_input)
             response = str(result.content)
 
-            success_response = StandardResponse(
-                intent=intent_type, response=response, requires_database=False, success=True
+            logger.info(
+                "[INTENT-AGENT] Generated general response",
+                intent_type=intent_type,
+                response_length=len(response),
+                agent_type="intent",
             )
-            return success_response.to_dict()
+
+            return response
 
         except Exception as e:
             logger.error(
-                "[INTENT-AGENT] Error generating general response", error=str(e), intent=intent_type
+                "[INTENT-AGENT] Error generating general response", 
+                error=str(e), 
+                intent=intent_type,
+                agent_type="intent",
             )
 
             # Fallback responses based on intent
@@ -422,151 +293,7 @@ Response:""",
                 IntentType.UNKNOWN: "I'm not sure how to help with that. I specialize in resource allocation, employee search, project management, and skill matching. Could you please rephrase your question?",
             }
 
-            fallback_response = StandardResponse(
-                intent=intent_type,
-                response=fallback_responses.get(
-                    intent_type, fallback_responses[IntentType.UNKNOWN]
-                ),
-                requires_database=False,
-                success=False,
-                error=str(e),
-            )
-            return fallback_response.to_dict()
-
-    async def _extract_query_parameters(self, user_input: str) -> dict[str, Any]:
-        """Extract enhanced query parameters from user input.
-
-        Args:
-            user_input: User's query
-
-        Returns:
-            Enhanced parameters dictionary for query agent
-        """
-        try:
-            result = await self.extraction_chain.ainvoke({"user_input": user_input})
-
-            # Try to parse JSON response
-            import json
-            import re
-
-            try:
-                content = str(result.content)
-
-                # Strip markdown code block formatting if present
-                # Pattern matches ```json\n...``` or ```\n...```
-                json_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", content, re.DOTALL)
-                if json_match:
-                    content = json_match.group(1).strip()
-
-                params = json.loads(content)
-
-                # Ensure query_type is mapped to QueryType enum
-                query_type_str = params.get("query_type", "resource_search")
-                query_type_mapping = {
-                    "resource_search": QueryType.RESOURCE_SEARCH,
-                    "skill_search": QueryType.SKILL_SEARCH,
-                    "department_search": QueryType.DEPARTMENT_SEARCH,
-                    "analytics": QueryType.ANALYTICS,
-                    "unknown": QueryType.UNKNOWN,
-                }
-                params["query_type"] = query_type_mapping.get(
-                    query_type_str, QueryType.RESOURCE_SEARCH
-                )
-
-                # Set reasonable defaults if not specified
-                if "limit" not in params:
-                    params["limit"] = 50
-
-                return params
-
-            except json.JSONDecodeError:
-                # Fallback to basic extraction with keyword analysis
-                logger.warning(
-                    "[INTENT-AGENT] Failed to parse JSON from query extraction",
-                    response=str(result.content),
-                )
-                return self._fallback_parameter_extraction(user_input)
-
-        except Exception as e:
-            logger.error(
-                "[INTENT-AGENT] Error extracting query parameters",
-                error=str(e),
-                user_input=user_input,
-            )
-            return self._fallback_parameter_extraction(user_input)
-
-    def _fallback_parameter_extraction(self, user_input: str) -> dict[str, Any]:
-        """Fallback parameter extraction using keyword analysis.
-
-        Args:
-            user_input: User's query
-
-        Returns:
-            Basic parameters dictionary
-        """
-        lower_input = user_input.lower()
-
-        # Determine query type based on keywords
-        if any(
-            keyword in lower_input
-            for keyword in ["skill", "technology", "expertise", "programming"]
-        ):
-            query_type = QueryType.SKILL_SEARCH
-        elif any(keyword in lower_input for keyword in ["department", "team", "group", "division"]):
-            query_type = QueryType.DEPARTMENT_SEARCH
-        elif any(
-            keyword in lower_input
-            for keyword in [
-                "overallocation",
-                "overallocated",
-                "summary",
-                "analysis",
-                "report",
-                "metrics",
-                "timeline",
-                "composition",
-            ]
-        ):
-            query_type = QueryType.ANALYTICS
-        else:
-            query_type = QueryType.RESOURCE_SEARCH
-
-        # Extract basic filters
-        filters = {}
-
-        # Look for email addresses
-        import re
-
-        email_pattern = r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"
-        emails = re.findall(email_pattern, user_input)
-        if emails:
-            filters["email"] = emails[0]
-
-        # Look for common designations
-        designations = [
-            "software engineer",
-            "senior software engineer",
-            "tech lead",
-            "manager",
-            "developer",
-        ]
-        for designation in designations:
-            if designation in lower_input:
-                filters["designation"] = designation.title()
-                break
-
-        # Look for project status
-        if "active" in lower_input:
-            filters["project_status"] = "active"
-        elif "completed" in lower_input:
-            filters["project_status"] = "completed"
-
-        # Look for percentage thresholds
-        percentage_matches = re.findall(r"(\d+)%", user_input)
-        if percentage_matches:
-            filters["availability_threshold"] = int(percentage_matches[0])
-
-        return {"query_type": query_type, "entities": [], "filters": filters, "limit": 50}
+            return fallback_responses.get(intent_type, fallback_responses[IntentType.UNKNOWN])
 
     def _format_context(self, context: dict[str, Any]) -> str:
         """Format context for prompt inclusion.
