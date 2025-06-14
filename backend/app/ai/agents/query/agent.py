@@ -125,7 +125,8 @@ class QueryAgent(BaseAgent):
 
                 if is_valid:
                     logger.info(
-                        f"[QUERY-AGENT] Query validated successfully on attempt {attempt + 1}", agent_type="query"
+                        f"[QUERY-AGENT] Query validated successfully on attempt {attempt + 1}",
+                        agent_type="query",
                     )
                     break
                 else:
@@ -136,7 +137,8 @@ class QueryAgent(BaseAgent):
                     )
                     if attempt == max_retries:
                         logger.error(
-                            "[QUERY-AGENT] Max retries reached, using last generated query", agent_type="query"
+                            "[QUERY-AGENT] Max retries reached, using last generated query",
+                            agent_type="query",
                         )
 
             # Detect query type dynamically from the generated SQL
@@ -170,7 +172,10 @@ class QueryAgent(BaseAgent):
 
         except Exception as e:
             logger.error(
-                "[QUERY-AGENT] Error generating query", error=str(e), input_data=input_data, agent_type="query"
+                "[QUERY-AGENT] Error generating query",
+                error=str(e),
+                input_data=input_data,
+                agent_type="query",
             )
             return {"query": "", "parameters": {}, "query_type": "unknown", "error": str(e)}
 
