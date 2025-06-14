@@ -11,7 +11,6 @@ backend_path = Path(__file__).parent.parent
 sys.path.insert(0, str(backend_path))
 
 from app.ai.agents.intent.agent import IntentAgent, IntentType
-from app.ai.agents.query.agent import QueryType
 from app.ai.core.config import AIConfig
 
 
