@@ -4,14 +4,13 @@ from enum import Enum
 from typing import Any
 
 import structlog
-from langchain_core.prompts import PromptTemplate
-from langchain_openai import ChatOpenAI
-
 from app.ai.agents.base import BaseAgent
 from app.ai.agents.query.agent import QueryAgent, QueryType  # Import QueryType from query agent
 from app.ai.core.config import AIConfig
 from app.core.config import settings
 from app.schemas.ai import QueryRequest
+from langchain_core.prompts import PromptTemplate
+from langchain_openai import ChatOpenAI
 
 logger = structlog.get_logger()
 
