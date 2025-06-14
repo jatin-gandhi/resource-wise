@@ -134,9 +134,7 @@ Response:""",
         Returns:
             Dictionary containing intent classification and response
         """
-        logger.info("[INTENT-AGENT] Received request", 
-                   input_data=input_data, 
-                   agent_type="intent")
+        logger.info("[INTENT-AGENT] Received request", input_data=input_data, agent_type="intent")
 
         try:
             # Parse and validate input data
@@ -180,7 +178,7 @@ Response:""",
                         "original_query": request.query,
                         "session_id": request.session_id,
                         "user_id": request.user_id,
-                    }
+                    },
                 }
 
         except Exception as e:
@@ -226,7 +224,7 @@ Response:""",
             }
 
             classified_intent = intent_mapping.get(intent_str, IntentType.UNKNOWN)
-            
+
             logger.info(
                 "[INTENT-AGENT] Intent classification result",
                 raw_response=intent_str,
@@ -238,8 +236,8 @@ Response:""",
 
         except Exception as e:
             logger.error(
-                "[INTENT-AGENT] Error classifying intent", 
-                error=str(e), 
+                "[INTENT-AGENT] Error classifying intent",
+                error=str(e),
                 user_input=user_input,
                 agent_type="intent",
             )
@@ -279,8 +277,8 @@ Response:""",
 
         except Exception as e:
             logger.error(
-                "[INTENT-AGENT] Error generating general response", 
-                error=str(e), 
+                "[INTENT-AGENT] Error generating general response",
+                error=str(e),
                 intent=intent_type,
                 agent_type="intent",
             )

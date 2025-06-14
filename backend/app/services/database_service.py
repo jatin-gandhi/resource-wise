@@ -19,7 +19,9 @@ class DatabaseService:
         self.max_results = 1000  # Maximum results to return
         self.query_timeout = 30  # Query timeout in seconds
 
-    async def execute_query(self, sql_query: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def execute_query(
+        self, sql_query: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Execute SQL query and return results.
 
         Args:
@@ -30,7 +32,7 @@ class DatabaseService:
             Dictionary containing query results and metadata
         """
         start_time = time.time()
-        
+
         logger.info(
             "[DATABASE-SERVICE] Executing query",
             sql_preview=sql_query[:100] + "..." if len(sql_query) > 100 else sql_query,
@@ -41,7 +43,7 @@ class DatabaseService:
             async with AsyncSessionLocal() as session:
                 # Execute the query
                 result = await session.execute(text(sql_query), params or {})
-                
+
                 # Handle different query types
                 if sql_query.strip().upper().startswith("SELECT"):
                     return await self._handle_select_query(result, start_time)
@@ -52,13 +54,13 @@ class DatabaseService:
 
         except Exception as e:
             execution_time = (time.time() - start_time) * 1000
-            
+
             logger.error(
                 "[DATABASE-SERVICE] Query execution failed",
                 error=str(e),
                 execution_time_ms=execution_time,
             )
-            
+
             return {
                 "success": False,
                 "error": str(e),
@@ -81,15 +83,15 @@ class DatabaseService:
             # Fetch all rows
             rows = result.fetchall()
             columns = list(result.keys()) if rows else []
-            
+
             # Convert to list of dictionaries
             db_results = []
-            for row in rows[:self.max_results]:  # Limit results
+            for row in rows[: self.max_results]:  # Limit results
                 row_dict = dict(zip(columns, row))
                 db_results.append(row_dict)
-            
+
             execution_time = (time.time() - start_time) * 1000
-            
+
             logger.info(
                 "[DATABASE-SERVICE] SELECT query completed",
                 row_count=len(db_results),
@@ -97,7 +99,7 @@ class DatabaseService:
                 execution_time_ms=execution_time,
                 truncated=len(rows) > self.max_results,
             )
-            
+
             return {
                 "success": True,
                 "db_results": db_results,
@@ -111,7 +113,7 @@ class DatabaseService:
         except Exception as e:
             execution_time = (time.time() - start_time) * 1000
             logger.error("[DATABASE-SERVICE] Error processing SELECT results", error=str(e))
-            
+
             return {
                 "success": False,
                 "error": str(e),
@@ -133,13 +135,13 @@ class DatabaseService:
         try:
             affected_rows = getattr(result, "rowcount", 0)
             execution_time = (time.time() - start_time) * 1000
-            
+
             logger.info(
                 "[DATABASE-SERVICE] Modification query completed",
                 affected_rows=affected_rows,
                 execution_time_ms=execution_time,
             )
-            
+
             return {
                 "success": True,
                 "db_results": [{"affected_rows": affected_rows}],
@@ -151,7 +153,7 @@ class DatabaseService:
         except Exception as e:
             execution_time = (time.time() - start_time) * 1000
             logger.error("[DATABASE-SERVICE] Error processing modification results", error=str(e))
-            
+
             return {
                 "success": False,
                 "error": str(e),
@@ -170,7 +172,7 @@ class DatabaseService:
             Error type classification
         """
         error_lower = error_message.lower()
-        
+
         if "timeout" in error_lower or "timed out" in error_lower:
             return "TIMEOUT"
         elif "permission" in error_lower or "access denied" in error_lower:
@@ -188,4 +190,4 @@ class DatabaseService:
 
 
 # Global database service instance
-database_service = DatabaseService() 
+database_service = DatabaseService()

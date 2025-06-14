@@ -279,13 +279,13 @@ class AgentWorkflow:
             # Prepare input for Response Agent
             query_details = state.get("query_details", {})
             db_result = state.get("database_result", {})
-            
+
             response_input = {
                 "db_results": db_result.get("db_results", []),
                 "original_query": state["user_input"],
                 "query_context": {
                     **query_details,  # SQL generation context
-                    **db_result,      # Database execution context
+                    **db_result,  # Database execution context
                 },
                 "user_id": state["context"].get("user_id"),
                 "session_id": state["session_id"],
@@ -310,7 +310,7 @@ class AgentWorkflow:
                 "metadata": {
                     **state.get("query_result", {}).get("metadata", {}),
                     **response_result.get("metadata", {}),
-                }
+                },
             }
 
             state["query_result"] = final_result

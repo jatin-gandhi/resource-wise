@@ -140,10 +140,12 @@ Generate a helpful, friendly error response:""",
         Returns:
             Dictionary containing natural language response
         """
-        logger.info("[RESPONSE-AGENT] Received request", 
-                   has_results=bool(input_data.get("db_results")),
-                   success=input_data.get("success", False),
-                   agent_type="response")
+        logger.info(
+            "[RESPONSE-AGENT] Received request",
+            has_results=bool(input_data.get("db_results")),
+            success=input_data.get("success", False),
+            agent_type="response",
+        )
 
         try:
             # Check if this is an error case
@@ -168,7 +170,7 @@ Generate a helpful, friendly error response:""",
                 "response": "I retrieved your data successfully, but encountered an issue generating the response. Please try again.",
                 "success": False,
                 "error": str(e),
-                "agent_type": "response"
+                "agent_type": "response",
             }
 
     async def _generate_success_response(
@@ -186,7 +188,7 @@ Generate a helpful, friendly error response:""",
         """
         try:
             result_count = len(db_results)
-            
+
             logger.info(
                 "[RESPONSE-AGENT] Generating success response",
                 result_count=result_count,
@@ -196,7 +198,7 @@ Generate a helpful, friendly error response:""",
 
             # Prepare data for LLM (limit size to avoid token limits)
             limited_results = self._prepare_results_for_llm(db_results)
-            
+
             # Format query context for prompt
             context_summary = self._format_query_context(query_context)
 
@@ -226,7 +228,7 @@ Generate a helpful, friendly error response:""",
                     "query_type": query_context.get("query_type", "unknown"),
                     "execution_time": query_context.get("execution_time", 0),
                     "tables_used": query_context.get("tables", []),
-                }
+                },
             }
 
         except Exception as e:
@@ -315,7 +317,7 @@ Generate a helpful, friendly error response:""",
 
         # Limit results to avoid token limits
         limited_results = db_results[:max_rows]
-        
+
         # Format as clean JSON-like structure
         formatted_results = []
         for i, row in enumerate(limited_results, 1):
@@ -328,11 +330,11 @@ Generate a helpful, friendly error response:""",
                     if len(str_value) > 100:
                         str_value = str_value[:97] + "..."
                     clean_row[key] = str_value
-            
+
             formatted_results.append(f"Result {i}: {clean_row}")
 
         result_text = "\n".join(formatted_results)
-        
+
         # Add truncation notice if needed
         if len(db_results) > max_rows:
             result_text += f"\n... and {len(db_results) - max_rows} more results"
@@ -349,13 +351,13 @@ Generate a helpful, friendly error response:""",
             Formatted context string
         """
         parts = []
-        
+
         if query_context.get("query_type"):
             parts.append(f"Query Type: {query_context['query_type']}")
-        
+
         if query_context.get("tables"):
             parts.append(f"Tables: {', '.join(query_context['tables'])}")
-            
+
         if query_context.get("execution_time"):
             parts.append(f"Execution Time: {query_context['execution_time']}ms")
 
@@ -372,16 +374,16 @@ Generate a helpful, friendly error response:""",
         """
         if not db_results:
             return "No results found."
-        
+
         count = len(db_results)
         if count == 1:
             # Show key fields from single result
             first_result = db_results[0]
             key_info = []
-            for key in ['name', 'email', 'title', 'designation', 'project_name']:
+            for key in ["name", "email", "title", "designation", "project_name"]:
                 if key in first_result and first_result[key]:
                     key_info.append(f"{key}: {first_result[key]}")
-            
+
             if key_info:
                 return f"Found 1 result - {', '.join(key_info[:3])}"
             else:
