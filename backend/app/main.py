@@ -11,6 +11,12 @@ from app.core.database import create_tables
 from app.routers import ai, allocations, chat, employees, health, projects
 
 # Configure structured logging for readable console output
+import logging
+
+# Set the root logger level based on DEBUG setting
+log_level = logging.DEBUG if settings.DEBUG else logging.INFO
+logging.basicConfig(level=log_level)
+
 structlog.configure(
     processors=[
         structlog.stdlib.filter_by_level,

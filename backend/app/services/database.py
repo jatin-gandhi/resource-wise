@@ -7,6 +7,8 @@ from typing import Any
 import asyncpg
 import structlog
 
+from app.core.config import settings
+
 logger = structlog.get_logger()
 
 
@@ -18,12 +20,12 @@ class DatabaseService:
         self._connection_pool: asyncpg.Pool | None = None
         self._max_rows = 1000  # Maximum rows to return
         self._query_timeout = 30  # Query timeout in seconds
-        self._db_host = "localhost"
-        self._db_port = 5433
-        self._db_user = "admin"
-        self._db_password = "admin"
-        self._db_name = "resourcewise"
-        self._db_driver = "postgresql+asyncpg"
+        self._db_host = settings.DB_HOST
+        self._db_port = settings.DB_PORT
+        self._db_user = settings.DB_USER
+        self._db_password = settings.DB_PASSWORD
+        self._db_name = settings.DB_NAME
+        self._db_driver = settings.DB_DRIVER
 
         # Allowed SQL operations (security whitelist)
         self._allowed_operations = {

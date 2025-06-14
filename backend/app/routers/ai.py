@@ -86,7 +86,7 @@ async def stream_query(
     """Stream query processing using AI orchestrator."""
     start_time = time.time()
 
-    logger.info(f"@/stream [{request.session_id or 'new'}] {len(request.query)}chars")
+    logger.info(f"[STREAM] [{request.session_id or 'new'}] {len(request.query)}chars")
 
     try:
         # Create a wrapper generator to log streaming completion
@@ -103,11 +103,11 @@ async def stream_query(
                     yield chunk
 
                 processing_time = round((time.time() - start_time) * 1000, 1)
-                logger.info(f"@/stream ✓ {processing_time}ms → {token_count} tokens")
+                logger.info(f"[STREAM] Completed in {processing_time}ms → {token_count} tokens")
 
             except Exception as e:
                 processing_time = round((time.time() - start_time) * 1000, 1)
-                logger.error(f"@/stream ✗ {processing_time}ms - {str(e)}")
+                logger.error(f"[STREAM] Failed in {processing_time}ms - {str(e)}")
                 raise
 
         return StreamingResponse(
@@ -123,5 +123,5 @@ async def stream_query(
 
     except Exception as e:
         processing_time = round((time.time() - start_time) * 1000, 1)
-        logger.error(f"@/stream ✗ {processing_time}ms - {str(e)}")
+        logger.error(f"[STREAM] Failed in {processing_time}ms - {str(e)}")
         raise HTTPException(status_code=500, detail=str(e)) from e
