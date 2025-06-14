@@ -57,14 +57,14 @@ class ContextService:
         if session_id in self._contexts:
             logger.info(f"Found context in memory", session_id=session_id)
             return self._contexts[session_id]
-        
+
         # Try loading from file
         context = self._load_context_from_file(session_id)
         if context:
             # Cache in memory
             self._contexts[session_id] = context
             logger.info(f"Loaded conversation context from file", session_id=session_id)
-        
+
         return context
 
     def create_context(
@@ -84,16 +84,14 @@ class ContextService:
             Created conversation context
         """
         context = ConversationContext(
-            session_id=session_id, 
-            user_id=user_id,
-            metadata=metadata or {}
+            session_id=session_id, user_id=user_id, metadata=metadata or {}
         )
         self._contexts[session_id] = context
-        
+
         # Save to file immediately
         self._save_context_to_file(context)
         logger.info(f"Created new conversation context", session_id=session_id)
-        
+
         return context
 
     def add_to_history(
@@ -114,13 +112,13 @@ class ContextService:
             # Add timestamp if not present
             if "timestamp" not in message:
                 message["timestamp"] = datetime.now().isoformat()
-            
+
             context.history.append(message)
             context.update_timestamp()
-            
+
             # Save updated context to file
             self._save_context_to_file(context)
-            
+
             return context
         return None
 
@@ -153,15 +151,19 @@ class ContextService:
             Loaded context or None if file doesn't exist
         """
         file_path = self._get_conversation_file_path(session_id)
-        
+
         try:
             if file_path.exists():
-                with open(file_path, 'r', encoding='utf-8') as f:
+                with open(file_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 return ConversationContext(**data)
         except Exception as e:
-            logger.error(f"Failed to load conversation from file: {e}", session_id=session_id, file_path=str(file_path))
-        
+            logger.error(
+                f"Failed to load conversation from file: {e}",
+                session_id=session_id,
+                file_path=str(file_path),
+            )
+
         return None
 
     def _save_context_to_file(self, context: ConversationContext) -> bool:
@@ -174,22 +176,30 @@ class ContextService:
             True if saved successfully, False otherwise
         """
         file_path = self._get_conversation_file_path(context.session_id)
-        
+
         try:
             # Convert to dict for JSON serialization
             data = context.dict()
-            
+
             # Write to file atomically (write to temp file, then rename)
-            temp_path = file_path.with_suffix('.tmp')
-            with open(temp_path, 'w', encoding='utf-8') as f:
+            temp_path = file_path.with_suffix(".tmp")
+            with open(temp_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
-            
+
             # Atomic rename
             temp_path.rename(file_path)
-            
-            logger.debug(f"Saved conversation context to file", session_id=context.session_id, file_path=str(file_path))
+
+            logger.debug(
+                f"Saved conversation context to file",
+                session_id=context.session_id,
+                file_path=str(file_path),
+            )
             return True
-            
+
         except Exception as e:
-            logger.error(f"Failed to save conversation to file: {e}", session_id=context.session_id, file_path=str(file_path))
+            logger.error(
+                f"Failed to save conversation to file: {e}",
+                session_id=context.session_id,
+                file_path=str(file_path),
+            )
             return False
