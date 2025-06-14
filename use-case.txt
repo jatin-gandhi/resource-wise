@@ -1,0 +1,48 @@
+General
+As a resource manager, I want to be able to use this system for resource management.
+Resource Dashboard View
+
+As a resource manager, I need to see the list of all my company resources
+As a resource manager, I need to see the monthly availability of my resources
+Example: A resource may be busy for the first 3 months of a year (Jan, Feb, Mar) & then he may be available for the rest of the year. I should be able to get that monthly view. 
+Example: A resource may get available from the month of July. The view should show that he is not available prior to July. ( till the month of June)
+
+As a resource manager,  I need to see the skills of a given resource
+As a resource manager,  I need to see the organization of a given resource
+Example: A resource may belong to KD India. He may be an Independent consultant or could be part of a Dev partner organization. 
+As a resource manager, I would like to see the Role of a given resource (like Technical lead, architect, QA engineer, etc)
+As a resource manager, I would like to see the cost & billing rate of a given resource 
+As a resource manager, I need to create or provision the resource with the details described above
+As a resource manager, I want to see if a given resource is optimally allocated, under-allocated or over-allocated. (see below for example. The overallocated resource is highlighted in RED for the given month, while an under-allocated resource is highlighted GREEN) 
+
+As a resource manager, I would like to see the detailed project allocation for a given resource ( see the below example for Mithun’s December 2021 allocation)  
+
+As a resource manager, I need to see a list of all the projects in-progress or completed for the current calendar year (please refer to the screenshot below)
+Example: Consider a project named RTR for a customer named Aspect. The view should display the customer name as well as the project name. A customer may have multiple projects in progress. In that case, a combined view like the example below needs to be available.  
+
+As a resource manager, I need to see a list of the projects done in the last 18 months
+As a resource manager, I need to see a list of resources allocated to a project (need monthly view, please refer to the screenshot below) 
+
+As a resource manager, I need to see the total cost of every project
+As a resource manager, I need to see the monthly cost of every project
+As a resource manager, I need to create a new project for a customer
+As a resource manager, I need to create a new project for an existing customer
+As a resource manager, I need to assign resources to a new project or an existing project
+As a resource manager, I need to update the resources of a project
+
+As a resource manager, I need to see  how a given resource is allocated during a given month (please refer to the screenshot below)
+Example: A resource may be 50% allocated to project A, 25% to project B & the remaining 25% for project C. 
+Another resource may be 50% allocated to project A. 
+He is available for another project with his remaining 50% capacity. 
+
+As a resource manager, I need to see project wise (%) KD India headcount for each project.   (please refer to the screenshot below)
+Example: ABC Project, Sky Development project has 10.2% of KD India head-count allocated.
+
+Check the availability of a required skill-set in his organization
+Identify & allocate resources to a project 
+Check if his resources’ workloads are balanced.
+Check if nobody is idle or overallocated. 
+Check the organization-wise share of resources over all the Kickdrum projects 
+Publish the monthly allocation so that every engineer is aware of his current & upcoming allocations. 
+Everyone has access to the project timeline to see their contribution to the big picture. 
+

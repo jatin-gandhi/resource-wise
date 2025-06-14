@@ -140,12 +140,12 @@ Generate a helpful, friendly error response:""",
         Returns:
             Dictionary containing natural language response
         """
-        logger.info(
-            "[RESPONSE-AGENT] Received request",
-            has_results=bool(input_data.get("db_results")),
-            success=input_data.get("success", False),
-            agent_type="response",
-        )
+        # logger.info(
+        #     "[RESPONSE-AGENT] Received request",
+        #     has_results=bool(input_data.get("db_results")),
+        #     success=input_data.get("success", False),
+        #     agent_type="response",
+        # )
 
         try:
             # Check if this is an error case
@@ -189,12 +189,12 @@ Generate a helpful, friendly error response:""",
         try:
             result_count = len(db_results)
 
-            logger.info(
-                "[RESPONSE-AGENT] Generating success response",
-                result_count=result_count,
-                query_type=query_context.get("query_type", "unknown"),
-                agent_type="response",
-            )
+            # logger.info(
+            #     "[RESPONSE-AGENT] Generating success response",
+            #     result_count=result_count,
+            #     query_type=query_context.get("query_type", "unknown"),
+            #     agent_type="response",
+            # )
 
             # Prepare data for LLM (limit size to avoid token limits)
             limited_results = self._prepare_results_for_llm(db_results)
@@ -213,11 +213,11 @@ Generate a helpful, friendly error response:""",
             result = await self.response_chain.ainvoke(chain_input)
             natural_response = str(result.content)
 
-            logger.info(
-                "[RESPONSE-AGENT] Generated natural response",
-                response_length=len(natural_response),
-                agent_type="response",
-            )
+            # logger.info(
+            #     "[RESPONSE-AGENT] Generated natural response",
+            #     response_length=len(natural_response),
+            #     agent_type="response",
+            # )
 
             return {
                 "response": natural_response,
@@ -259,11 +259,11 @@ Generate a helpful, friendly error response:""",
             error_details = input_data.get("error", "Unknown error occurred")
             error_type = input_data.get("error_type", "UNKNOWN")
 
-            logger.info(
-                "[RESPONSE-AGENT] Generating error response",
-                error_type=error_type,
-                agent_type="response",
-            )
+            # logger.info(
+            #     "[RESPONSE-AGENT] Generating error response",
+            #     error_type=error_type,
+            #     agent_type="response",
+            # )
 
             # Generate user-friendly error response
             chain_input = {
@@ -275,11 +275,11 @@ Generate a helpful, friendly error response:""",
             result = await self.error_chain.ainvoke(chain_input)
             error_response = str(result.content)
 
-            logger.info(
-                "[RESPONSE-AGENT] Generated error response",
-                response_length=len(error_response),
-                agent_type="response",
-            )
+            # logger.info(
+            #     "[RESPONSE-AGENT] Generated error response",
+            #     response_length=len(error_response),
+            #     agent_type="response",
+            # )
 
             return {
                 "response": error_response,

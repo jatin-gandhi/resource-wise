@@ -55,7 +55,7 @@ class ContextService:
         """
         # First check in-memory cache
         if session_id in self._contexts:
-            logger.info(f"Found context in memory", session_id=session_id)
+            # logger.info(f"Found context in memory", session_id=session_id)
             return self._contexts[session_id]
 
         # Try loading from file
@@ -63,7 +63,7 @@ class ContextService:
         if context:
             # Cache in memory
             self._contexts[session_id] = context
-            logger.info(f"Loaded conversation context from file", session_id=session_id)
+            # logger.info(f"Loaded conversation context from file", session_id=session_id)
 
         return context
 
@@ -90,7 +90,7 @@ class ContextService:
 
         # Save to file immediately
         self._save_context_to_file(context)
-        logger.info(f"Created new conversation context", session_id=session_id)
+        # logger.info(f"Created new conversation context", session_id=session_id)
 
         return context
 
@@ -126,7 +126,7 @@ class ContextService:
         """Create conversations directory if it doesn't exist."""
         try:
             self._conversations_dir.mkdir(exist_ok=True)
-            logger.info(f"Conversations directory ready: {self._conversations_dir}")
+            # logger.info(f"Conversations directory ready: {self._conversations_dir}")
         except Exception as e:
             logger.error(f"Failed to create conversations directory: {e}")
 

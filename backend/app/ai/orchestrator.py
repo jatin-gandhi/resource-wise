@@ -36,7 +36,7 @@ class AIOrchestrator:
         self.stream_service = StreamService()
 
         openai_status = "✓" if self.llm_service.client else "✗"
-        logger.info(f"orchestrator ready {openai_status} (with workflow)")
+        # logger.info(f"orchestrator ready {openai_status} (with workflow)")
 
     async def stream_query(
         self,
@@ -52,7 +52,7 @@ class AIOrchestrator:
             session_id = session_id or str(uuid4())
             user_id = user_id or "anonymous"
 
-            logger.info(f"streaming query: {len(query)}chars, session: {session_id}")
+            # logger.info(f"streaming query: {len(query)}chars, session: {session_id}")
 
             # Initialize database service if not already done
             if not db_service._connection_pool:
@@ -124,7 +124,7 @@ class AIOrchestrator:
             yield f"data: {json.dumps({'type': 'done', 'data': completion_data})}\n\n"
             yield "data: [DONE]\n\n"
 
-            logger.info(f"streaming completed: {len(accumulated_content)}chars")
+            # logger.info(f"streaming completed: {len(accumulated_content)}chars")
 
         except Exception as e:
             logger.error(f"stream failed: {str(e)}", exc_info=True)

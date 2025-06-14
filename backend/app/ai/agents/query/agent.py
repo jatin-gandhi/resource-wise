@@ -1,11 +1,13 @@
-"""Query generation agent implementation."""
+"""Enhanced Query Agent with integrated fuzzy term resolution."""
 
-from typing import Any
+from typing import Any, Dict, List
 
 import structlog
 from app.ai.agents.base import BaseAgent
+from app.ai.agents.fuzzy.classifier import FuzzyClassifier
+from app.ai.agents.fuzzy.resolver import FuzzyTermResolver
 from app.ai.core.config import AIConfig
-from app.ai.prompts import QueryPrompts
+from app.ai.prompts.query_prompts import QueryPrompts
 from app.ai.services.schema import DatabaseSchemaService
 from app.core.config import settings
 from app.schemas.ai import QueryRequest
@@ -15,59 +17,57 @@ logger = structlog.get_logger()
 
 
 class QueryAgent(BaseAgent):
-    """Agent for generating database queries."""
+    """Enhanced Query Agent with integrated fuzzy term resolution."""
 
-    def __init__(self, config: AIConfig):
-        """Initialize the query agent.
+    def __init__(self, config: AIConfig, debug_explanations: bool = False):
+        """Initialize the enhanced query agent.
 
         Args:
-            config: AI configuration settings. Required - contains API keys and model settings.
-
+            config: AI configuration settings
+            debug_explanations: Whether to generate query explanations for debugging
         """
-
         super().__init__(config)
+
+        # Store debug flag
+        self.debug_explanations = debug_explanations
 
         # Initialize services
         self.schema_service = DatabaseSchemaService()
+        self.fuzzy_classifier = FuzzyClassifier(config)
+        self.fuzzy_resolver = FuzzyTermResolver(config)
 
-        # Initialize LLM using config values
-        # Note: api_key will be automatically picked up from OPENAI_API_KEY env var
+        # Initialize LLM
         self.llm = ChatOpenAI(
             model=self.config.model_name,
-            temperature=0.5,
+            temperature=0.2,
             verbose=settings.DEBUG,
             api_key=self.config.api_key,
         )
 
-        # Initialize prompts from the prompts package
-        self.query_generation_prompt = QueryPrompts.get_query_generation_prompt()
-        self.query_validation_prompt = QueryPrompts.get_query_validation_prompt()
+        # Use unified fuzzy-enhanced prompts (handles both fuzzy and non-fuzzy queries)
+        self.query_prompt = QueryPrompts.get_fuzzy_enhanced_query_prompt()
+        self.validation_prompt = QueryPrompts.get_fuzzy_query_validation_prompt()
+        self.explanation_prompt = QueryPrompts.get_query_explanation_prompt()
 
         # Initialize chains
-        self.generation_chain = self.query_generation_prompt | self.llm
-        self.validation_chain = self.query_validation_prompt | self.llm
+        self.generation_chain = self.query_prompt | self.llm
+        self.validation_chain = self.validation_prompt | self.llm
+        self.explanation_chain = self.explanation_prompt | self.llm
 
     async def process(self, input_data: dict[str, Any]) -> dict[str, Any]:
-        """Process the input to generate a database query.
+        """Process the input to generate a database query with fuzzy term support.
 
         Args:
-            input_data: Input data containing intent and parameters
-                Expected format:
-                {
-                    "query": "Find all developers with Python skills",
-                    "session_id": "123",
-                    "user_id": "456",
-                    "metadata": {
-                        "filters": {...},
-                        "sort_by": "...",
-                        "limit": 10
-                    }
-                }
+            input_data: Input data containing query and parameters
 
         Returns:
-            Dictionary containing generated query and parameters
+            Dictionary containing generated query and metadata
         """
-        logger.info("[QUERY-AGENT] Received request", input_data=input_data, agent_type="query")
+        logger.info(
+            "Received query request",
+            input_data=input_data,
+            agent_type="query_agent",
+        )
 
         try:
             # Parse and validate intent data
@@ -75,125 +75,256 @@ class QueryAgent(BaseAgent):
 
             # Get database schema
             schema = await self._get_database_schema()
-
-            # Get metadata with defaults
             metadata = intent.metadata or {}
 
-            # Generate initial query with retry logic
-            max_retries = 2
-            final_query = ""
-
-            for attempt in range(max_retries + 1):
-                logger.info(
-                    f"[QUERY-AGENT] Query generation attempt {attempt + 1}/{max_retries + 1}",
-                    raw_query=intent.query,
-                    agent_type="query",
-                )
-
-                # Generate initial query
-                chain_input = {
-                    "parameters": str(metadata),
-                    "raw_query": intent.query,
-                    "schema": schema,
-                }
-
-                generated_query = await self.generation_chain.ainvoke(chain_input)
-                raw_query = str(generated_query.content)
-
-                logger.info(
-                    "[QUERY-AGENT] Raw SQL generated by LLM",
-                    raw_sql=raw_query[:200] + "..." if len(raw_query) > 200 else raw_query,
-                    agent_type="query",
-                )
-
-                # Validate and improve the query
-                validation_input = {
-                    "query": raw_query,
-                    "schema": schema,
-                }
-
-                validation_result = await self.validation_chain.ainvoke(validation_input)
-                final_query = self._extract_query_from_validation(str(validation_result.content))
-
-                logger.info(
-                    "[QUERY-AGENT] SQL after validation and cleanup",
-                    final_sql=final_query[:200] + "..." if len(final_query) > 200 else final_query,
-                    agent_type="query",
-                )
-
-                # Validate against actual schema
-                is_valid, schema_errors = await self._validate_query_against_schema(final_query)
-
-                if is_valid:
-                    logger.info(
-                        f"[QUERY-AGENT] Query validated successfully on attempt {attempt + 1}",
-                        agent_type="query",
-                    )
-                    break
-                else:
-                    logger.warning(
-                        f"[QUERY-AGENT] Schema validation failed on attempt {attempt + 1}",
-                        errors=schema_errors,
-                        agent_type="query",
-                    )
-                    if attempt == max_retries:
-                        logger.error(
-                            "[QUERY-AGENT] Max retries reached, using last generated query",
-                            agent_type="query",
-                        )
-
-            # Detect query type dynamically from the generated SQL
-            query_type = self._detect_query_type(final_query)
-
-            # Extract metadata for analysis
-            tables = self._extract_tables(final_query)
-            joins = self._extract_joins(final_query)
-            filters = self._extract_filters(final_query)
-
-            # Create query result
-            result = {
-                "query": final_query,
-                "parameters": metadata,
-                "query_type": query_type,
-                "tables": tables,
-                "joins": joins,
-                "filters": filters,
-            }
+            # Check if query contains fuzzy terms and resolve them
+            classification_result = await self.fuzzy_classifier.classify(intent.query)
+            is_fuzzy = classification_result["classification"] == "fuzzy"
 
             logger.info(
-                "[QUERY-AGENT] Final SQL query generated successfully",
-                query_type=query_type,
-                tables=tables,
-                joins_count=len(joins),
-                final_sql=final_query,
-                agent_type="query",
+                "Query classification completed",
+                query=intent.query,
+                is_fuzzy=is_fuzzy,
+                fuzzy_terms=classification_result.get("fuzzy_terms", []),
+                agent_type="query_agent",
             )
 
-            return result
+            # Resolve fuzzy terms (empty if non-fuzzy)
+            resolved_terms = {}
+            if is_fuzzy:
+                resolved_terms = await self.fuzzy_resolver.resolve_fuzzy_terms(intent.query)
+                logger.info(
+                    "Fuzzy terms resolved",
+                    resolved_terms=resolved_terms,
+                    agent_type="query_agent",
+                )
+
+            # Generate SQL query using unified approach
+            return await self._generate_query(intent, schema, metadata, resolved_terms)
 
         except Exception as e:
             logger.error(
-                "[QUERY-AGENT] Error generating query",
+                "Error processing query",
                 error=str(e),
                 input_data=input_data,
-                agent_type="query",
+                agent_type="query_agent",
             )
             return {"query": "", "parameters": {}, "query_type": "unknown", "error": str(e)}
 
-    def _detect_query_type(self, query: str) -> str:
-        """Detect the type of SQL operation from the query.
+    async def _generate_query(
+        self,
+        intent: QueryRequest,
+        schema: str,
+        metadata: dict,
+        resolved_terms: Dict[str, List[str]],
+    ) -> dict[str, Any]:
+        """Generate SQL query using unified fuzzy-enhanced approach.
 
         Args:
-            query: SQL query string
+            intent: Query request object
+            schema: Database schema
+            metadata: Additional parameters
+            resolved_terms: Resolved fuzzy terms (empty if non-fuzzy)
 
         Returns:
-            Query type (select, insert, update, delete, unknown)
+            Query result dictionary
         """
+        logger.info(
+            "Generating SQL query",
+            query=intent.query,
+            has_fuzzy_terms=bool(resolved_terms),
+            agent_type="query_agent",
+        )
+
+        # Format resolved terms for the prompt (empty string if no fuzzy terms)
+        resolved_terms_text = self._format_resolved_terms(resolved_terms)
+
+        # Generate SQL with unified approach
+        max_retries = 2
+        final_query = ""
+
+        for attempt in range(max_retries + 1):
+            logger.info(
+                f"SQL generation attempt {attempt + 1}/{max_retries + 1}",
+                query=intent.query,
+                agent_type="query_agent",
+            )
+
+            # Generate query
+            chain_input = {
+                "raw_query": intent.query,
+                "schema": schema,
+                "resolved_terms": resolved_terms_text,
+                "parameters": str(metadata),
+            }
+
+            generated_query = await self.generation_chain.ainvoke(chain_input)
+            raw_query = str(generated_query.content)
+
+            logger.info(
+                "Raw SQL generated",
+                raw_sql=raw_query[:200] + "..." if len(raw_query) > 200 else raw_query,
+                agent_type="query_agent",
+            )
+
+            # Validate and improve the query
+            validation_input = {
+                "query": raw_query,
+                "schema": schema,
+                "resolved_terms": resolved_terms_text,
+            }
+            validation_result = await self.validation_chain.ainvoke(validation_input)
+            final_query = self._extract_query_from_validation(str(validation_result.content))
+
+            # Validate against schema
+            is_valid, schema_errors = await self._validate_query_against_schema(final_query)
+
+            if is_valid:
+                logger.info(
+                    f"Query validated successfully on attempt {attempt + 1}",
+                    agent_type="query_agent",
+                )
+                break
+            else:
+                logger.warning(
+                    f"Schema validation failed on attempt {attempt + 1}",
+                    errors=schema_errors,
+                    agent_type="query_agent",
+                )
+
+        # Create result
+        result = self._create_query_result(final_query, metadata, resolved_terms)
+
+        # Add explanation if debug mode is enabled
+        if self.debug_explanations:
+            explanation = await self._generate_explanation(final_query, schema, resolved_terms_text)
+            result["explanation"] = explanation
+
+        logger.info(
+            "SQL query generated successfully",
+            query_type=result["query_type"],
+            has_fuzzy_context=bool(resolved_terms),
+            final_sql=final_query,
+            agent_type="query_agent",
+        )
+
+        return result
+
+    def _format_resolved_terms(self, resolved_terms: Dict[str, List[str]]) -> str:
+        """Format resolved terms for the prompt.
+
+        Args:
+            resolved_terms: Dictionary of fuzzy terms to resolved values
+
+        Returns:
+            Formatted string for the prompt
+        """
+        if not resolved_terms:
+            return "No fuzzy terms to resolve."
+
+        formatted_terms = []
+        for fuzzy_term, resolved_values in resolved_terms.items():
+            values_str = ", ".join(f"'{v}'" for v in resolved_values)
+            formatted_terms.append(f"- '{fuzzy_term}' → [{values_str}]")
+
+        return "\n".join(formatted_terms)
+
+    def _create_query_result(
+        self, query: str, metadata: dict, resolved_terms: Dict[str, List[str]] = None
+    ) -> dict[str, Any]:
+        """Create the final query result dictionary.
+
+        Args:
+            query: Generated SQL query
+            metadata: Query metadata
+            resolved_terms: Optional resolved fuzzy terms
+
+        Returns:
+            Query result dictionary
+        """
+        query_type = self._detect_query_type(query)
+        tables = self._extract_tables(query)
+        joins = self._extract_joins(query)
+        filters = self._extract_filters(query)
+
+        result = {
+            "query": query,
+            "parameters": metadata,
+            "query_type": query_type,
+            "tables": tables,
+            "joins": joins,
+            "filters": filters,
+        }
+
+        # Add fuzzy context if available
+        if resolved_terms:
+            result["fuzzy_context"] = {
+                "resolved_terms": resolved_terms,
+                "explanation": self._create_fuzzy_explanation(resolved_terms),
+            }
+
+        return result
+
+    def _create_fuzzy_explanation(self, resolved_terms: Dict[str, List[str]]) -> str:
+        """Create explanation of fuzzy term resolution.
+
+        Args:
+            resolved_terms: Dictionary of resolved terms
+
+        Returns:
+            Human-readable explanation
+        """
+        explanations = []
+        for fuzzy_term, resolved_values in resolved_terms.items():
+            if len(resolved_values) == 1:
+                explanations.append(f"'{fuzzy_term}' → '{resolved_values[0]}'")
+            else:
+                values_str = "', '".join(resolved_values[:3])
+                if len(resolved_values) > 3:
+                    explanations.append(
+                        f"'{fuzzy_term}' → '{values_str}' and {len(resolved_values) - 3} more"
+                    )
+                else:
+                    explanations.append(f"'{fuzzy_term}' → '{values_str}'")
+
+        return "Resolved fuzzy terms: " + "; ".join(explanations)
+
+    async def _generate_explanation(self, query: str, schema: str, resolved_terms: str) -> str:
+        """Generate explanation for the query.
+
+        Args:
+            query: Generated SQL query
+            schema: Database schema
+            resolved_terms: Formatted resolved terms
+
+        Returns:
+            Human-readable explanation of the query
+        """
+        try:
+            explanation_input = {
+                "query": query,
+                "schema": schema,
+                "resolved_terms": resolved_terms,
+            }
+
+            explanation_result = await self.explanation_chain.ainvoke(explanation_input)
+            return str(explanation_result.content).strip()
+
+        except Exception as e:
+            logger.warning(
+                "Failed to generate query explanation",
+                error=str(e),
+                agent_type="query_agent",
+            )
+            return f"Query explanation unavailable: {str(e)}"
+
+    # Utility methods
+    def _detect_query_type(self, query: str) -> str:
+        """Detect the type of SQL operation from the query."""
         if not query:
             return "unknown"
 
         query_upper = query.strip().upper()
-
         if query_upper.startswith("SELECT"):
             return "select"
         elif query_upper.startswith("INSERT"):
@@ -203,24 +334,14 @@ class QueryAgent(BaseAgent):
         elif query_upper.startswith("DELETE"):
             return "delete"
         elif query_upper.startswith("WITH"):
-            # CTE queries are typically SELECT-based
             return "select"
         else:
             return "unknown"
 
     def _extract_query_from_validation(self, validation_result: str) -> str:
-        """Extract the final query from validation result.
-
-        Args:
-            validation_result: Raw validation result from LLM
-
-        Returns:
-            Cleaned and formatted SQL query
-        """
-        # Remove any markdown code block markers
+        """Extract the final query from validation result."""
         query = validation_result.replace("```sql", "").replace("```", "")
 
-        # Remove common prefixes that LLM might add
         prefixes_to_remove = [
             "Corrected SQL Query:",
             "SQL Query:",
@@ -233,79 +354,43 @@ class QueryAgent(BaseAgent):
             if query.strip().startswith(prefix):
                 query = query.replace(prefix, "", 1).strip()
 
-        # Remove extra whitespace and normalize
         query = " ".join(query.split())
 
-        # Ensure query ends with semicolon if it doesn't already
         if query and not query.rstrip().endswith(";"):
             query = query.rstrip() + ";"
 
         return query
 
     async def _validate_query_against_schema(self, query: str) -> tuple[bool, list[str]]:
-        """Validate that the query only uses tables and columns that exist in the schema.
-
-        Args:
-            query: SQL query to validate
-
-        Returns:
-            Tuple of (is_valid, list_of_errors)
-        """
+        """Validate query against database schema."""
         errors = []
 
         try:
-            # Get actual table names and columns from schema service
             table_names = await self.schema_service.get_table_names()
-
             used_tables = set()
 
-            # Find tables after FROM and JOIN keywords
             words = query.split()
             for i, word in enumerate(words):
                 if word.upper() in ["FROM", "JOIN"] and i + 1 < len(words):
-                    table_name = words[i + 1].strip("();,").split()[0]  # Handle aliases
+                    table_name = words[i + 1].strip("();,").split()[0]
                     used_tables.add(table_name.lower())
 
-            # Check if all used tables exist
             for table in used_tables:
                 if table not in [t.lower() for t in table_names]:
                     errors.append(f"Table '{table}' does not exist in schema")
 
-            # Basic column validation (simplified - could be enhanced)
-            for table in used_tables:
-                if table in [t.lower() for t in table_names]:
-                    # Get actual table name (case-sensitive)
-                    actual_table = next(t for t in table_names if t.lower() == table)
-                    columns = await self.schema_service.get_table_columns(actual_table)
-
-                    # Check for obvious column references in SELECT clause
-                    # This is a basic check - could be enhanced with proper SQL parsing
-                    for _col in columns:
-                        pass  # For now, we rely on the LLM validation
-
             return len(errors) == 0, errors
 
         except Exception as e:
-            logger.warning("[QUERY-AGENT] Error validating query against schema", error=str(e))
-            return True, []  # If validation fails, assume query is valid to avoid blocking
+            logger.warning("Error validating query against schema", error=str(e))
+            return True, []
 
     async def _get_database_schema(self) -> str:
-        """Get the database schema for query generation.
-
-        Returns:
-            String containing the database schema
-        """
+        """Get the database schema for query generation."""
         return await self.schema_service.get_schema_description()
 
     def _extract_tables(self, query: str) -> list[str]:
-        """Extract table names from SQL query.
-
-        Args:
-            query: SQL query string
-
-        Returns:
-            List of table names
-        """
+        """Extract table names from SQL query."""
         tables = []
         for line in query.split():
             if "FROM" in line.upper() or "JOIN" in line.upper():
@@ -318,31 +403,17 @@ class QueryAgent(BaseAgent):
         return tables
 
     def _extract_joins(self, query: str) -> list[str]:
-        """Extract JOIN clauses from SQL query.
-
-        Args:
-            query: SQL query string
-
-        Returns:
-            List of JOIN clauses
-        """
+        """Extract JOIN clauses from SQL query."""
         joins = []
         words = query.split()
         for i, word in enumerate(words):
             if word.upper() == "JOIN":
-                join_clause = " ".join(words[i : i + 5])  # Basic join clause
+                join_clause = " ".join(words[i : i + 5])
                 joins.append(join_clause)
         return joins
 
     def _extract_filters(self, query: str) -> str:
-        """Extract WHERE clause from SQL query.
-
-        Args:
-            query: SQL query string
-
-        Returns:
-            WHERE clause string
-        """
+        """Extract WHERE clause from SQL query."""
         if "WHERE" not in query.upper():
             return "1=1"
 

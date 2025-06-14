@@ -3,7 +3,6 @@
 from typing import Any
 
 import structlog
-
 from app.models import (
     Allocation,
     Designation,
@@ -113,11 +112,15 @@ class DatabaseSchemaService:
             elif "allocationpercentage" in col_type.lower():
                 col_type = "ENUM(25, 50, 75, 100)"
             elif "skillproficiencylevel" in col_type.lower():
-                col_type = "ENUM(1, 2, 3, 4, 5)"
+                col_type = "ENUM(BEGINNER, NOVICE, INTERMEDIATE, ADVANCED, EXPERT)"
             elif "skillsource" in col_type.lower():
-                col_type = "ENUM(PAT, manual, seed, self_assessment, manager_assessment)"
+                col_type = "ENUM(PAT, MANUAL, SEED, SELF_ASSESSMENT, MANAGER_ASSESSMENT)"
             elif "projecttype" in col_type.lower():
                 col_type = "ENUM(customer, internal)"
+            elif "employeegroup" in col_type.lower():
+                col_type = "ENUM(KD_INDIA, KD_US, DEV_PARTNER, INDEPENDENT)"
+            elif "employeetype" in col_type.lower():
+                col_type = "ENUM(FULL_TIME, CONTRACTOR, CONSULTANT, INTERN)"
 
         # Add constraints information
         constraints = []
@@ -141,24 +144,29 @@ class DatabaseSchemaService:
         """Get fallback schema description if dynamic retrieval fails.
 
         Returns:
-            Hardcoded schema description
+            Hardcoded schema description with all business fields
         """
         return """
         Table: users
         Columns:
             id (UUID, primary key)
             email (string, unique, not null)
-            name (string, not null)
+            username (string, unique, not null)
+            full_name (string)
+            bio (text)
             is_active (boolean, default true)
+            is_superuser (boolean, default false)
             created_at (timestamp)
             updated_at (timestamp)
 
         Table: designations
         Columns:
             id (UUID, primary key)
-            code (string, unique, not null)
-            title (string, not null)
-            level (integer)
+            code (string, unique, not null) -- Short codes like 'SSE', 'TL', 'PM', 'SDE'
+            title (string, not null) -- Full titles like 'Senior Software Engineer', 'Technical Lead'
+            level (integer) -- Hierarchy level 1-5
+            is_leadership (boolean, default false)
+            is_active (boolean, default true)
             created_at (timestamp)
             updated_at (timestamp)
 
@@ -168,9 +176,15 @@ class DatabaseSchemaService:
             email (string, unique, not null)
             name (string, not null)
             designation_id (UUID, foreign key -> designations.id)
-            capacity_percent (integer, default 100)
+            capacity_percent (integer, default 100) -- e.g. 100, 70, 50
             onboarded_at (date)
             is_active (boolean, default true)
+            employee_group (ENUM: KD_INDIA, KD_US, DEV_PARTNER, INDEPENDENT) -- Organization group
+            organization (string) -- Company/partner name like 'Kickdrum India', 'TechPartner Solutions'
+            employee_type (ENUM: FULL_TIME, CONTRACTOR, CONSULTANT, INTERN) -- Employment type
+            location (string) -- Work location like 'Bangalore', 'New York', 'Remote'
+            cost_per_hour (decimal) -- Internal hourly cost rate
+            billing_rate (decimal) -- Client billing rate per hour
             created_at (timestamp)
             updated_at (timestamp)
         Relationships:
@@ -178,30 +192,42 @@ class DatabaseSchemaService:
             skills -> EmployeeSkill
             embeddings -> EmployeeEmbedding
             allocations -> Allocation
+            managed_projects -> Project (as project manager)
 
         Table: projects
         Columns:
             id (UUID, primary key)
             name (string, not null)
             description (text)
-            status (enum: PLANNING, ACTIVE, ON_HOLD, COMPLETED, CANCELLED)
-            type (enum: INTERNAL, CLIENT, RESEARCH)
-            start_date (date)
-            end_date (date)
+            duration_months (integer)
+            tech_stack (array of strings) -- Technologies used
+            project_type (ENUM: customer, internal)
+            status (ENUM: planning, active, on_hold, completed, cancelled)
+            customer_name (string) -- Client/customer name
+            project_cost (decimal) -- Total project cost
+            monthly_cost (decimal) -- Monthly project cost
+            start_date (date) -- Project start date
+            end_date (date) -- Project end date
+            project_manager_id (UUID, foreign key -> employees.id) -- Project manager
+            required_roles (array of strings) -- Required job roles
+            required_skills (array of strings) -- Required technical skills
             created_at (timestamp)
             updated_at (timestamp)
         Relationships:
             allocations -> Allocation
+            project_manager -> Employee
 
         Table: allocations
         Columns:
             id (UUID, primary key)
             employee_id (UUID, foreign key -> employees.id)
             project_id (UUID, foreign key -> projects.id)
-            percentage (enum: TWENTY_FIVE, FIFTY, SEVENTY_FIVE, HUNDRED)
-            status (enum: PLANNED, ACTIVE, COMPLETED, CANCELLED)
+            percent_allocated (integer) -- Percentage like 25, 50, 75, 100
             start_date (date, not null)
-            end_date (date)
+            end_date (date, not null)
+            status (ENUM: active, completed, cancelled)
+            hourly_rate (decimal) -- Hourly rate for this specific allocation
+            monthly_cost (decimal) -- Monthly cost for this allocation
             created_at (timestamp)
             updated_at (timestamp)
         Relationships:
@@ -212,12 +238,12 @@ class DatabaseSchemaService:
         Columns:
             id (UUID, primary key)
             employee_id (UUID, foreign key -> employees.id)
-            skill_name (string, not null)
-            summary (text)
-            experience_months (integer, default 0)
-            last_used (date)
-            source (enum: PAT, MANUAL, INFERRED)
-            proficiency_level (enum: BEGINNER, INTERMEDIATE, ADVANCED, EXPERT, MASTER)
+            skill_name (string, not null) -- Technical skill like 'React', 'Java', 'AWS'
+            summary (text) -- Description of experience
+            experience_months (integer, default 0) -- Months of experience
+            last_used (date) -- When last used this skill
+            source (ENUM: PAT, MANUAL, SEED, SELF_ASSESSMENT, MANAGER_ASSESSMENT)
+            proficiency_level (ENUM: BEGINNER, NOVICE, INTERMEDIATE, ADVANCED, EXPERT)
             created_at (timestamp)
             updated_at (timestamp)
         Relationships:
@@ -226,13 +252,41 @@ class DatabaseSchemaService:
         Table: employee_embeddings
         Columns:
             employee_id (UUID, primary key, foreign key -> employees.id)
-            source (string, primary key)
-            summary (text, not null)
-            embedding (vector[1536])
+            source (string, primary key) -- Source like 'skills', 'projects', 'profile'
+            summary (text, not null) -- Text that was embedded
+            embedding (vector[1536]) -- OpenAI embedding vector
             created_at (timestamp)
             updated_at (timestamp)
         Relationships:
             employee -> Employee
+
+        IMPORTANT BUSINESS FIELD USAGE:
+        
+        1. EMPLOYEE ORGANIZATION QUERIES:
+           - employee_group: Filter by 'KD_INDIA', 'KD_US', 'DEV_PARTNER', 'INDEPENDENT'
+           - organization: Filter by company names like 'Kickdrum India', 'TechPartner Solutions'
+           - location: Filter by work locations like 'Bangalore', 'New York', 'Remote'
+           - employee_type: Filter by 'FULL_TIME', 'CONTRACTOR', 'CONSULTANT', 'INTERN'
+        
+        2. FINANCIAL QUERIES:
+           - cost_per_hour: Employee's standard internal cost rate
+           - billing_rate: Employee's standard client billing rate
+           - hourly_rate (allocations): Project-specific hourly rate (may differ from employee base rate)
+           - monthly_cost (allocations): Calculated monthly cost for specific allocation
+           - project_cost: Total cost of entire project
+           - monthly_cost (projects): Monthly cost of entire project
+        
+        3. PROJECT MANAGEMENT QUERIES:
+           - customer_name: Client/customer name for projects
+           - project_manager_id: Employee who manages the project
+           - start_date/end_date: Project timeline dates
+        
+        EXAMPLE BUSINESS QUERIES:
+        - "Show me KD India employees" → WHERE employee_group = 'KD_INDIA'
+        - "Find contractors in Bangalore" → WHERE employee_type = 'CONTRACTOR' AND location = 'Bangalore'
+        - "What's the total cost of Mobile Banking App?" → SELECT project_cost FROM projects WHERE name = 'Mobile Banking App'
+        - "Show monthly costs by organization" → GROUP BY employee_group, SUM(monthly_cost)
+        - "Who manages the Healthcare project?" → JOIN projects p, employees e WHERE p.project_manager_id = e.id
         """
 
     async def get_table_names(self) -> list[str]:

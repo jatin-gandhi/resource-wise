@@ -2,13 +2,12 @@
 
 import uuid
 
+from app.models.base import BaseModel
+from app.models.enums import SkillProficiencyLevel, SkillSource
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import UUID, Column, Date, Enum, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import relationship
-
-from app.models.base import BaseModel
-from app.models.enums import SkillProficiencyLevel, SkillSource
 
 
 class EmployeeSkill(BaseModel):
@@ -30,6 +29,9 @@ class EmployeeSkill(BaseModel):
 
     # Full-text search vector (automatically maintained by trigger)
     search_vector = Column(TSVECTOR)
+
+    # Embedding for semantic search (MiniLM-384)
+    embedding = Column(Vector(1536))
 
     # Relationships
     employee = relationship("Employee", back_populates="skills")

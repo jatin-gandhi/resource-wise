@@ -28,8 +28,8 @@ class AllocationStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
-class AllocationPercentage(int, Enum):
-    """Standard allocation percentages"""
+class AllocationPercentage(Enum):
+    """Common allocation percentages"""
 
     QUARTER = 25
     HALF = 50
@@ -37,21 +37,39 @@ class AllocationPercentage(int, Enum):
     FULL = 100
 
 
-class SkillProficiencyLevel(int, Enum):
-    """Skill proficiency levels"""
-
-    BEGINNER = 1
-    NOVICE = 2
-    INTERMEDIATE = 3
-    ADVANCED = 4
-    EXPERT = 5
-
-
 class SkillSource(str, Enum):
-    """Source of skill assessment"""
+    """Source of skill information"""
 
     PAT = "PAT"  # Performance Assessment Tool
-    MANUAL = "manual"
-    SEED = "seed"  # For seeded data
-    SELF_ASSESSMENT = "self_assessment"
-    MANAGER_ASSESSMENT = "manager_assessment"
+    MANUAL = "MANUAL"  # Manually entered
+    SEED = "SEED"  # Seeded data
+    SELF_ASSESSMENT = "SELF_ASSESSMENT"
+    MANAGER_ASSESSMENT = "MANAGER_ASSESSMENT"
+
+
+class SkillProficiencyLevel(str, Enum):
+    """Skill proficiency levels"""
+
+    BEGINNER = "BEGINNER"  # 0-6 months
+    NOVICE = "NOVICE"  # 6-12 months
+    INTERMEDIATE = "INTERMEDIATE"  # 1-3 years
+    ADVANCED = "ADVANCED"  # 3-5 years
+    EXPERT = "EXPERT"  # 5+ years
+
+
+class EmployeeGroup(str, Enum):
+    """Employee organization group"""
+
+    KD_INDIA = "KD_INDIA"
+    KD_US = "KD_US"
+    DEV_PARTNER = "DEV_PARTNER"
+    INDEPENDENT = "INDEPENDENT"
+
+
+class EmployeeType(str, Enum):
+    """Employee type classification"""
+
+    FULL_TIME = "FULL_TIME"
+    CONTRACTOR = "CONTRACTOR"
+    CONSULTANT = "CONSULTANT"
+    INTERN = "INTERN"
