@@ -10,7 +10,7 @@ from langchain_core.messages import SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, HumanMessagePromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import PydanticOutputParser
-from langchain_core.runnables import RunnablePassthrough
+from langchain_core.runnables import RunnableLambda
 
 from app.ai.agents.base import BaseAgent
 from app.ai.core.config import AIConfig
@@ -144,7 +144,10 @@ class MatchingAgent(BaseAgent):
 
         # Create the matching chain
         self.matching_chain = (
-            RunnablePassthrough() | self.matching_prompt | self.llm | self.output_parser
+            RunnableLambda(self._prepare_prompt_variables)
+            | self.matching_prompt
+            | self.llm
+            | self.output_parser
         )
 
         logger.info("[MATCHING-AGENT] Initialized")
@@ -249,6 +252,24 @@ Please analyze the available employees and provide:
 
         return "\n\n".join(formatted)
 
+    def _prepare_prompt_variables(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Prepare prompt variables for the matching chain."""
+        # Validate and parse input
+        matching_input = MatchingInput(**input_data)
+        project = matching_input.project_details
+
+        return {
+            "project_name": project.name,
+            "duration": project.duration,
+            "starting_from": project.starting_from,
+            "skills_required": ", ".join(project.skills_required),
+            "resources_required": self._format_resources_required(project.resources_required),
+            "available_employees": self._format_available_employees(
+                matching_input.available_employees
+            ),
+            "format_instructions": self.output_parser.get_format_instructions(),
+        }
+
     async def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """Process matching request.
 
@@ -283,10 +304,8 @@ Please analyze the available employees and provide:
         try:
             logger.info("[MATCHING-AGENT] Processing matching request")
 
-            # Validate and parse input
+            # Log input details for debugging
             matching_input = MatchingInput(**input_data)
-
-            # Prepare prompt variables
             project = matching_input.project_details
             logger.info(
                 "[MATCHING-AGENT] Input received for matching",
@@ -294,20 +313,8 @@ Please analyze the available employees and provide:
                 available_employees_count=len(matching_input.available_employees),
             )
 
-            prompt_variables = {
-                "project_name": project.name,
-                "duration": project.duration,
-                "starting_from": project.starting_from,
-                "skills_required": ", ".join(project.skills_required),
-                "resources_required": self._format_resources_required(project.resources_required),
-                "available_employees": self._format_available_employees(
-                    matching_input.available_employees
-                ),
-                "format_instructions": self.output_parser.get_format_instructions(),
-            }
-
             # Invoke the matching chain
-            result = await self.matching_chain.ainvoke(prompt_variables)
+            result = await self.matching_chain.ainvoke(input_data)
 
             processing_time = round((time.time() - start_time) * 1000, 1)
 

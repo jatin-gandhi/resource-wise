@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test script for the Matching Agent with comprehensive test data.
+Test script for the Matching Agent with comprehensive test data and verification.
 """
 
 import asyncio
@@ -477,7 +477,7 @@ def print_results(scenario_name: str, results: Dict[str, Any], test_data: Dict[s
 
 
 async def run_test_scenario(agent: MatchingAgent, scenario_name: str, test_data: Dict[str, Any]):
-    """Run a single test scenario."""
+    """Run a single test scenario with verification."""
     print(f"\n{'-'*60}")
     print(f"EXECUTING {scenario_name}")
     print(f"{'-'*60}")
@@ -491,14 +491,25 @@ async def run_test_scenario(agent: MatchingAgent, scenario_name: str, test_data:
     print(f"\nProcessing...")
     
     try:
+        # Get expected results for verification
+        expected = get_expected_matches_for_scenario(scenario_name, test_data)
+        
+        # Run the matching
         results = await agent.process(test_data)
+        
+        # Print results
         print_results(scenario_name, results, test_data)
-        return results
+        
+        # Verify results
+        verification = verify_matching_results(expected, results, test_data)
+        print_verification_results(verification)
+        
+        return results, verification
     except Exception as e:
         print(f"\nEXECUTION FAILED")
         print(f"Error: {str(e)}")
         print(f"{'='*60}")
-        return None
+        return None, None
 
 
 async def main():
@@ -527,8 +538,8 @@ async def main():
     results = []
     
     for scenario_name, test_data in scenarios:
-        result = await run_test_scenario(agent, scenario_name, test_data)
-        results.append((scenario_name, result, test_data))
+        result, verification = await run_test_scenario(agent, scenario_name, test_data)
+        results.append((scenario_name, result, verification, test_data))
     
     # Summary
     print(f"\n{'='*60}")
@@ -537,13 +548,32 @@ async def main():
     
     total_processing_time = 0
     successful_scenarios = 0
+    passed_verifications = 0
+    total_warnings = 0
+    total_errors = 0
     
-    for scenario_name, result, test_data in results:
+    for scenario_name, result, verification, test_data in results:
         if result and result.get("matching_results", {}).get("success", False):
             matching_results = result["matching_results"]
             processing_time = matching_results.get("processing_time_ms", 0)
             total_processing_time += processing_time
             successful_scenarios += 1
+            
+            # Verification metrics
+            verification_status = "N/A"
+            if verification:
+                if verification["overall_pass"]:
+                    if not verification["warnings"]:
+                        verification_status = "✅ PASSED"
+                        passed_verifications += 1
+                    else:
+                        verification_status = "⚠️  PASSED WITH WARNINGS"
+                        passed_verifications += 1
+                else:
+                    verification_status = "❌ FAILED"
+                
+                total_warnings += len(verification["warnings"])
+                total_errors += len(verification["errors"])
             
             # Calculate metrics
             project_details = test_data.get("project_details", {})
@@ -572,14 +602,22 @@ async def main():
             print(f"  Resource Fulfillment: {resource_fulfillment:.1f}% ({total_matched}/{total_required})")
             print(f"  Best Skills Match: {best_skills_match:.1f}%")
             print(f"  Team Combinations: {len(team_combinations)}")
+            print(f"  Verification: {verification_status}")
+            if verification and (verification["warnings"] or verification["errors"]):
+                print(f"    Warnings: {len(verification['warnings'])}, Errors: {len(verification['errors'])}")
             print()
         else:
             print(f"FAILED - {scenario_name}")
+            if verification:
+                print(f"  Verification: ❌ FAILED")
             print()
     
     # Overall statistics
     print(f"OVERALL STATISTICS:")
     print(f"  Successful Scenarios: {successful_scenarios}/4")
+    print(f"  Passed Verifications: {passed_verifications}/4")
+    print(f"  Total Warnings: {total_warnings}")
+    print(f"  Total Errors: {total_errors}")
     print(f"  Total Processing Time: {total_processing_time}ms")
     print(f"  Average Processing Time: {total_processing_time/successful_scenarios if successful_scenarios > 0 else 0:.1f}ms")
     
@@ -594,10 +632,265 @@ async def main():
     else:
         performance = "PERFORMANCE ISSUES DETECTED"
     
+    # Verification assessment
+    if passed_verifications == 4 and total_errors == 0:
+        if total_warnings == 0:
+            verification_assessment = "PERFECT VERIFICATION"
+        else:
+            verification_assessment = "GOOD VERIFICATION (with warnings)"
+    elif passed_verifications >= 3:
+        verification_assessment = "ACCEPTABLE VERIFICATION"
+    else:
+        verification_assessment = "VERIFICATION ISSUES DETECTED"
+    
     print(f"  Overall Performance: {performance}")
+    print(f"  Overall Verification: {verification_assessment}")
     
     print(f"\nTest suite completed!")
     print("=" * 60)
+
+
+# ============================================================================
+# VERIFICATION FUNCTIONS
+# ============================================================================
+
+def get_expected_matches_for_scenario(scenario_name: str, test_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Define expected outcomes for each test scenario based on our known data."""
+    
+    project_details = test_data["project_details"]
+    required_resources = project_details["resources_required"]
+    required_skills = set(project_details["skills_required"])
+    
+    # Analyze available employees to determine expected matches
+    employees = test_data["available_employees"]
+    
+    # Count available employees by designation
+    available_by_designation = {}
+    employees_with_required_skills = set()
+    
+    for emp in employees:
+        designation = emp["designation"]
+        if designation not in available_by_designation:
+            available_by_designation[designation] = 0
+        available_by_designation[designation] += 1
+        
+        # Check if employee has any required skills
+        emp_skills = {skill["skill_name"].lower() for skill in emp["skills"]}
+        required_skills_lower = {skill.lower() for skill in required_skills}
+        
+        if emp_skills.intersection(required_skills_lower):
+            employees_with_required_skills.add(emp["employee_id"])
+    
+    # Calculate expected resource fulfillment
+    expected_resource_fulfillment = {}
+    total_required = 0
+    total_available = 0
+    
+    for designation, required_count in required_resources.items():
+        available_count = available_by_designation.get(designation, 0)
+        fulfilled_count = min(required_count, available_count)
+        
+        expected_resource_fulfillment[designation] = {
+            "required": required_count,
+            "available": available_count,
+            "fulfilled": fulfilled_count,
+            "fulfillment_rate": (fulfilled_count / required_count * 100) if required_count > 0 else 0
+        }
+        
+        total_required += required_count
+        total_available += fulfilled_count
+    
+    overall_fulfillment_rate = (total_available / total_required * 100) if total_required > 0 else 0
+    
+    # Calculate expected skills coverage
+    all_employee_skills = set()
+    for emp in employees:
+        for skill in emp["skills"]:
+            all_employee_skills.add(skill["skill_name"].lower())
+    
+    required_skills_lower = {skill.lower() for skill in required_skills}
+    covered_skills = all_employee_skills.intersection(required_skills_lower)
+    missing_skills = required_skills_lower - covered_skills
+    
+    skills_coverage_rate = (len(covered_skills) / len(required_skills) * 100) if required_skills else 0
+    
+    # Scenario-specific expectations
+    if "Perfect Match" in project_details["name"]:
+        expected_assessment = "EXCELLENT"
+        min_resource_fulfillment = 100
+        min_skills_coverage = 100
+    elif "Resource Shortage" in project_details["name"]:
+        expected_assessment = "GOOD"
+        min_resource_fulfillment = 60
+        min_skills_coverage = 80
+    elif "Skill Gaps" in project_details["name"]:
+        expected_assessment = "CHALLENGING"
+        min_resource_fulfillment = 80
+        min_skills_coverage = 30
+    elif "Critical Shortfall" in project_details["name"]:
+        expected_assessment = "CRITICAL"
+        min_resource_fulfillment = 40
+        min_skills_coverage = 20
+    else:
+        expected_assessment = "UNKNOWN"
+        min_resource_fulfillment = 0
+        min_skills_coverage = 0
+    
+    return {
+        "scenario_name": scenario_name,
+        "expected_assessment": expected_assessment,
+        "resource_fulfillment": expected_resource_fulfillment,
+        "overall_fulfillment_rate": overall_fulfillment_rate,
+        "skills_coverage_rate": skills_coverage_rate,
+        "covered_skills": list(covered_skills),
+        "missing_skills": list(missing_skills),
+        "employees_with_skills": len(employees_with_required_skills),
+        "min_resource_fulfillment": min_resource_fulfillment,
+        "min_skills_coverage": min_skills_coverage,
+        "should_have_team_combinations": overall_fulfillment_rate > 0 and skills_coverage_rate > 0
+    }
+
+
+def verify_matching_results(expected: Dict[str, Any], actual_results: Dict[str, Any], test_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Verify actual results against expected outcomes."""
+    
+    verification_results = {
+        "scenario_name": expected["scenario_name"],
+        "overall_pass": True,
+        "checks": [],
+        "errors": [],
+        "warnings": []
+    }
+    
+    matching_results = actual_results.get("matching_results", {})
+    
+    if not matching_results.get("success", False):
+        verification_results["overall_pass"] = False
+        verification_results["errors"].append(f"Matching failed: {matching_results.get('error_message', 'Unknown error')}")
+        return verification_results
+    
+    # Check 1: Resource fulfillment verification
+    matched_resources = matching_results.get("matched_resources", {})
+    project_details = test_data["project_details"]
+    required_resources = project_details["resources_required"]
+    
+    total_required = sum(required_resources.values())
+    total_matched = sum(len(employees) for employees in matched_resources.values())
+    actual_fulfillment_rate = (total_matched / total_required * 100) if total_required > 0 else 0
+    
+    # Verify resource counts by designation
+    for designation, expected_info in expected["resource_fulfillment"].items():
+        actual_matched = len(matched_resources.get(designation, []))
+        expected_max = expected_info["available"]
+        required_count = expected_info["required"]
+        
+        if actual_matched > expected_max:
+            verification_results["errors"].append(
+                f"Too many {designation} matched: got {actual_matched}, max available {expected_max}"
+            )
+            verification_results["overall_pass"] = False
+        
+        if actual_matched < min(required_count, expected_max) * 0.8:  # Allow 20% tolerance
+            verification_results["warnings"].append(
+                f"Low {designation} matching: got {actual_matched}, expected ~{min(required_count, expected_max)}"
+            )
+    
+    # Check 2: Skills coverage verification
+    team_combinations = matching_results.get("possible_team_combinations", [])
+    
+    if expected["should_have_team_combinations"] and not team_combinations:
+        verification_results["errors"].append("Expected team combinations but none were provided")
+        verification_results["overall_pass"] = False
+    
+    if team_combinations:
+        best_combo = max(team_combinations, key=lambda x: x.get('skills_match', 0))
+        actual_skills_coverage = best_combo.get('skills_match', 0)
+        
+        if actual_skills_coverage < expected["min_skills_coverage"]:
+            verification_results["warnings"].append(
+                f"Skills coverage below expected minimum: {actual_skills_coverage:.1f}% < {expected['min_skills_coverage']}%"
+            )
+    
+    # Check 3: Employee skill validation
+    required_skills_lower = {skill.lower() for skill in project_details["skills_required"]}
+    
+    for designation, employees in matched_resources.items():
+        for emp in employees:
+            emp_skills_lower = {skill.lower() for skill in emp.get("skills", [])}
+            
+            if not emp_skills_lower.intersection(required_skills_lower):
+                verification_results["warnings"].append(
+                    f"Employee {emp.get('name', 'Unknown')} matched but has no required skills"
+                )
+    
+    # Check 4: Availability validation
+    for designation, employees in matched_resources.items():
+        for emp in employees:
+            availability = emp.get("available_percentage", 0)
+            if availability < 25:  # Very low availability
+                verification_results["warnings"].append(
+                    f"Employee {emp.get('name', 'Unknown')} has very low availability: {availability}%"
+                )
+    
+    # Check 5: Overall assessment validation
+    if actual_fulfillment_rate >= expected["min_resource_fulfillment"]:
+        verification_results["checks"].append(f"✓ Resource fulfillment meets minimum: {actual_fulfillment_rate:.1f}% >= {expected['min_resource_fulfillment']}%")
+    else:
+        verification_results["warnings"].append(f"Resource fulfillment below minimum: {actual_fulfillment_rate:.1f}% < {expected['min_resource_fulfillment']}%")
+    
+    if team_combinations:
+        best_skills = max(combo.get('skills_match', 0) for combo in team_combinations)
+        if best_skills >= expected["min_skills_coverage"]:
+            verification_results["checks"].append(f"✓ Skills coverage meets minimum: {best_skills:.1f}% >= {expected['min_skills_coverage']}%")
+        else:
+            verification_results["warnings"].append(f"Skills coverage below minimum: {best_skills:.1f}% < {expected['min_skills_coverage']}%")
+    
+    # Check 6: Team combination quality
+    if team_combinations:
+        high_quality_combos = [combo for combo in team_combinations if combo.get('skills_match', 0) >= 60]
+        if high_quality_combos:
+            verification_results["checks"].append(f"✓ Found {len(high_quality_combos)} high-quality team combinations (≥60% skills match)")
+        else:
+            verification_results["warnings"].append("No high-quality team combinations found (≥60% skills match)")
+    
+    return verification_results
+
+
+def print_verification_results(verification: Dict[str, Any]):
+    """Print verification results in a clear format."""
+    
+    print(f"\n{'='*60}")
+    print(f"VERIFICATION RESULTS: {verification['scenario_name']}")
+    print(f"{'='*60}")
+    
+    # Overall status
+    if verification["overall_pass"]:
+        if not verification["warnings"]:
+            print("✅ VERIFICATION PASSED - All checks successful")
+        else:
+            print("⚠️  VERIFICATION PASSED WITH WARNINGS")
+    else:
+        print("❌ VERIFICATION FAILED")
+    
+    # Successful checks
+    if verification["checks"]:
+        print(f"\n✅ SUCCESSFUL CHECKS:")
+        for check in verification["checks"]:
+            print(f"  {check}")
+    
+    # Warnings
+    if verification["warnings"]:
+        print(f"\n⚠️  WARNINGS:")
+        for warning in verification["warnings"]:
+            print(f"  • {warning}")
+    
+    # Errors
+    if verification["errors"]:
+        print(f"\n❌ ERRORS:")
+        for error in verification["errors"]:
+            print(f"  • {error}")
+    
+    print(f"{'='*60}")
 
 
 if __name__ == "__main__":
