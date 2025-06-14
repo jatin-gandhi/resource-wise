@@ -51,7 +51,7 @@ class AIOrchestrator:
             session_id = session_id or str(uuid4())
             user_id = user_id or "anonymous"
 
-            logger.info(f"processing query: {len(query)}chars, session: {session_id}")
+            logger.info(f"processing query: {query}, session: {session_id}")
 
             # Initialize database service if not already done
             if not db_service._connection_pool:

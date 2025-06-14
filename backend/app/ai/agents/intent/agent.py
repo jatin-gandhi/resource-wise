@@ -245,7 +245,7 @@ Response:""",
         Returns:
             Standardized dictionary containing the response based on intent
         """
-        logger.info("Intent agent received request", input_data=input_data, agent_type="intent")
+        logger.info("[INTENT-AGENT] Received request", input_data=input_data, agent_type="intent")
 
         try:
             # Parse and validate input data
@@ -258,7 +258,7 @@ Response:""",
             # Classify user intent
             intent_type = await self._classify_intent(request.query, context_str)
             logger.info(
-                "Intent classified", intent=intent_type, query=request.query, agent_type="intent"
+                "[INTENT-AGENT] Intent classified", intent=intent_type, query=request.query, agent_type="intent"
             )
 
             # Route based on intent
@@ -269,7 +269,7 @@ Response:""",
 
         except Exception as e:
             logger.error(
-                "Error processing intent", error=str(e), input_data=input_data, agent_type="intent"
+                "[INTENT-AGENT] Error processing intent", error=str(e), input_data=input_data, agent_type="intent"
             )
 
             error_response = StandardResponse(
@@ -308,7 +308,7 @@ Response:""",
             return intent_mapping.get(intent_str, IntentType.UNKNOWN)
 
         except Exception as e:
-            logger.error("Error classifying intent", error=str(e), user_input=user_input)
+            logger.error("[INTENT-AGENT] Error classifying intent", error=str(e), user_input=user_input)
             return IntentType.UNKNOWN
 
     async def _handle_database_query(self, request: QueryRequest) -> dict[str, Any]:
@@ -363,7 +363,7 @@ Response:""",
             return success_response.to_dict()
 
         except Exception as e:
-            logger.error("Error handling database query", error=str(e), query=request.query)
+            logger.error("[INTENT-AGENT] Error handling database query", error=str(e), query=request.query)
 
             error_response = StandardResponse(
                 intent=IntentType.DATABASE_QUERY,
@@ -403,7 +403,7 @@ Response:""",
             return success_response.to_dict()
 
         except Exception as e:
-            logger.error("Error generating general response", error=str(e), intent=intent_type)
+            logger.error("[INTENT-AGENT] Error generating general response", error=str(e), intent=intent_type)
 
             # Fallback responses based on intent
             fallback_responses = {
@@ -473,12 +473,12 @@ Response:""",
             except json.JSONDecodeError:
                 # Fallback to basic extraction with keyword analysis
                 logger.warning(
-                    "Failed to parse JSON from query extraction", response=str(result.content)
+                    "[INTENT-AGENT] Failed to parse JSON from query extraction", response=str(result.content)
                 )
                 return self._fallback_parameter_extraction(user_input)
 
         except Exception as e:
-            logger.error("Error extracting query parameters", error=str(e), user_input=user_input)
+            logger.error("[INTENT-AGENT] Error extracting query parameters", error=str(e), user_input=user_input)
             return self._fallback_parameter_extraction(user_input)
 
     def _fallback_parameter_extraction(self, user_input: str) -> dict[str, Any]:
