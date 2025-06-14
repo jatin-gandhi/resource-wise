@@ -32,3 +32,6 @@ build/
 *.bak
 
 .ruff_cache/
+
+# Conversation Storage
+conversations/

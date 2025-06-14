@@ -39,7 +39,7 @@ class IntentAgent(BaseAgent):
         # Note: api_key will be automatically picked up from OPENAI_API_KEY env var
         self.llm = ChatOpenAI(
             model=self.config.model_name,
-            temperature=0.1,  # Low temperature for consistent classification
+            temperature=0.3,  # Low temperature for consistent classification
             verbose=settings.DEBUG,
             api_key=self.config.api_key,
         )
@@ -312,7 +312,7 @@ Response:""",
 
         # Format last few exchanges
         recent_context = []
-        for item in history[-3:]:  # Last 3 exchanges
+        for item in history[-20:]:  # Last 10 exchanges
             if isinstance(item, dict):
                 role = item.get("role", "unknown")
                 content = item.get("content", "")
