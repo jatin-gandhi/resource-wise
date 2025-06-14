@@ -60,7 +60,6 @@ async def process_query(
             query=request.query,
             session_id=request.session_id,
             user_id=request.user_id,
-            metadata=request.metadata,
         )
 
         processing_time = round((time.time() - start_time) * 1000, 1)
@@ -97,7 +96,6 @@ async def stream_query(
                     query=request.query,
                     session_id=request.session_id,
                     user_id=request.user_id,
-                    metadata=request.metadata,
                 ):
                     token_count += 1
                     yield chunk
