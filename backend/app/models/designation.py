@@ -2,11 +2,11 @@
 
 import uuid
 
+from app.models.base import BaseModel
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import UUID, Boolean, Column, Index, Integer, String
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import relationship
-
-from app.models.base import BaseModel
 
 
 class Designation(BaseModel):
@@ -27,6 +27,9 @@ class Designation(BaseModel):
 
     # Full-text search vector (automatically maintained by trigger)
     search_vector = Column(TSVECTOR)
+
+    # Embedding for semantic search (MiniLM-384)
+    embedding = Column(Vector(1536))
 
     # Indexes for better performance
     __table_args__ = (

@@ -2,12 +2,12 @@
 
 import uuid
 
+from app.models.base import BaseModel
+from app.models.enums import ProjectStatus, ProjectType
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import ARRAY, UUID, Column, Enum, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import relationship
-
-from app.models.base import BaseModel
-from app.models.enums import ProjectStatus, ProjectType
 
 
 class Project(BaseModel):
@@ -30,6 +30,9 @@ class Project(BaseModel):
 
     # Full-text search vector (automatically maintained by trigger)
     search_vector = Column(TSVECTOR)
+
+    # Embedding for semantic search (MiniLM-384)
+    embedding = Column(Vector(1536))
 
     # Relationships
     allocations = relationship("Allocation", back_populates="project", cascade="all, delete-orphan")
