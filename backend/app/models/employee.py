@@ -2,11 +2,22 @@
 
 import uuid
 
-from sqlalchemy import UUID, Boolean, Column, Date, ForeignKey, Index, Integer, String
+from app.models.base import BaseModel
+from app.models.enums import EmployeeGroup, EmployeeType
+from sqlalchemy import (
+    UUID,
+    Boolean,
+    Column,
+    Date,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+)
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import relationship, validates
-
-from app.models.base import BaseModel
 
 
 class Employee(BaseModel):
@@ -25,6 +36,18 @@ class Employee(BaseModel):
     onboarded_at = Column(Date, nullable=True)  # Nullable for historical data flexibility
     is_active = Column(Boolean, default=True, index=True)
 
+    # Organization and classification fields
+    employee_group = Column(Enum(EmployeeGroup), nullable=True, index=True)  # KD India, KD-US, etc.
+    organization = Column(String(100), nullable=True, index=True)  # Company/partner name
+    employee_type = Column(
+        Enum(EmployeeType), nullable=True, index=True
+    )  # Full-time, contractor, etc.
+    location = Column(String(100), nullable=True, index=True)  # Bangalore, New York, Remote
+
+    # Financial fields
+    cost_per_hour = Column(Numeric(10, 2), nullable=True)  # Internal cost rate
+    billing_rate = Column(Numeric(10, 2), nullable=True)  # Client billing rate
+
     # Full-text search vector (automatically maintained by trigger)
     search_vector = Column(TSVECTOR)
 
@@ -37,6 +60,9 @@ class Employee(BaseModel):
     allocations = relationship(
         "Allocation", back_populates="employee", cascade="all, delete-orphan"
     )
+    managed_projects = relationship(
+        "Project", back_populates="project_manager", foreign_keys="Project.project_manager_id"
+    )
 
     # Indexes for better performance
     __table_args__ = (
@@ -44,6 +70,9 @@ class Employee(BaseModel):
         Index("idx_employee_search_vector", search_vector, postgresql_using="gin"),
         # Composite index for common queries
         Index("idx_employee_active_designation", is_active, designation_id),
+        Index("idx_employees_group_type", employee_group, employee_type),
+        Index("idx_employees_organization", organization),
+        Index("idx_employees_location", location),
     )
 
     def __repr__(self):

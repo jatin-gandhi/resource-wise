@@ -61,6 +61,12 @@ class FuzzyClassifier:
             # Parse the structured response
             parsed_result = self._parse_llm_response(response_text)
 
+            # If LLM says it's fuzzy, use fallback method to extract the actual fuzzy terms
+            # since the LLM only returns classification, not the specific terms
+            if parsed_result["classification"] == "fuzzy":
+                fallback_result = self._fallback_classification(query)
+                parsed_result["fuzzy_terms"] = fallback_result["fuzzy_terms"]
+
             # Validate classification
             if parsed_result["classification"] not in ["fuzzy", "precise"]:
                 logger.warning(
@@ -103,23 +109,36 @@ class FuzzyClassifier:
             Parsed result with classification and fuzzy terms
         """
         try:
-            lines = response_text.strip().split("\n")
-            classification = "precise"
-            fuzzy_terms = []
+            # Clean up the response
+            response_text = response_text.strip().upper()
 
-            for line in lines:
-                line = line.strip()
-                if line.startswith("Classification:"):
-                    classification = line.split(":", 1)[1].strip().lower()
-                elif line.startswith("Fuzzy Terms:"):
-                    terms_text = line.split(":", 1)[1].strip()
-                    if terms_text.lower() != "none":
-                        # Split by comma and clean up
-                        fuzzy_terms = [
-                            term.strip() for term in terms_text.split(",") if term.strip()
-                        ]
+            # The prompt asks for a simple one-word response: "FUZZY" or "PRECISE"
+            if response_text == "FUZZY":
+                # For fuzzy classification, we'll use the fallback method to extract terms
+                # since the LLM only returns the classification, not the specific terms
+                fallback_result = self._fallback_classification("")  # We'll get terms from fallback
+                return {"classification": "fuzzy", "fuzzy_terms": []}
+            elif response_text == "PRECISE":
+                return {"classification": "precise", "fuzzy_terms": []}
+            else:
+                # Try to parse structured format as fallback (in case prompt changes)
+                lines = response_text.split("\n")
+                classification = "precise"
+                fuzzy_terms = []
 
-            return {"classification": classification, "fuzzy_terms": fuzzy_terms}
+                for line in lines:
+                    line = line.strip()
+                    if line.startswith("CLASSIFICATION:"):
+                        classification = line.split(":", 1)[1].strip().lower()
+                    elif line.startswith("FUZZY TERMS:"):
+                        terms_text = line.split(":", 1)[1].strip()
+                        if terms_text.lower() != "none":
+                            # Split by comma and clean up
+                            fuzzy_terms = [
+                                term.strip() for term in terms_text.split(",") if term.strip()
+                            ]
+
+                return {"classification": classification, "fuzzy_terms": fuzzy_terms}
 
         except Exception as e:
             logger.error(

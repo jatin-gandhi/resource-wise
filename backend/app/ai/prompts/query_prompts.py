@@ -84,6 +84,8 @@ ENUM VALUE RULES:
 - AllocationPercentage: Use 25, 50, 75, 100 (integer numbers, not strings)
 - SkillProficiencyLevel: Use 1, 2, 3, 4, 5 (numbers)
 - ProjectType: Use 'customer', 'internal' (lowercase strings)
+- EmployeeGroup: Use 'KD_INDIA', 'KD_US', 'DEV_PARTNER', 'INDEPENDENT'
+- EmployeeType: Use 'FULL_TIME', 'CONTRACTOR', 'CONSULTANT', 'INTERN'
 
 DESIGNATION TABLE STRUCTURE:
 - designations.code: Short codes like 'SSE', 'TL', 'PM', 'SDE'
@@ -210,42 +212,118 @@ SELECT PATTERNS:
    - Always GROUP BY employee fields when using SUM() for allocations
    - Use LEFT JOIN allocations (not INNER JOIN) to include unallocated employees
    
+   TIMELINE AVAILABILITY QUERIES:
+   - Keywords: "when will", "when does", "when is [employee] available"
+   - Show current allocation status AND future availability dates
+   - Use CASE statements to show "Available now" vs specific end dates
+   - Include current allocation percentage and future availability percentage
+   - Filter allocations by a.end_date >= CURRENT_DATE to only consider current/future allocations
+   
    - CRITICAL: Never use aggregate functions like SUM() in WHERE clause - always use HAVING with GROUP BY
    - Always include `e.is_active = TRUE` for active employees only
 
-5. PROJECT QUERIES:
+6. PROJECT QUERIES:
    - Use projects.status for filtering active/completed projects  
    - Use projects.project_type for customer/internal filtering
    - Remember: project_type values are 'customer' and 'internal' (lowercase)
+   
+   CRITICAL: COMPREHENSIVE EMPLOYEE-PROJECT RELATIONSHIPS
+   - When asked for "projects of [employee]" or "all projects [employee] is involved in":
+     → Find projects where employee is BOTH project manager AND allocated team member
+     → Use LEFT JOIN with OR condition to capture both relationships
+     → Include role information (Project Manager vs Team Member)
+     → Show allocation details when available
+   - When asked for "projects [employee] is working on":
+     → Focus on allocation relationships (team member role)
+   - When asked for "projects [employee] manages":
+     → Focus on project_manager_id relationship only
 
-6. RESOURCE UTILIZATION QUERIES:
+7. RESOURCE UTILIZATION QUERIES:
    - Join allocations + employees + projects for utilization analysis
    - Use SUM(CAST(a.percent_allocated AS INTEGER)) for total allocation calculations
    - GROUP BY employee or project for aggregated views
    - Filter by project_type = 'customer' for customer project utilization
 
-7. SKILL-BASED EMPLOYEE SEARCH WITH FUZZY TERMS:
+8. SKILL-BASED EMPLOYEE SEARCH WITH FUZZY TERMS:
    - Join employees + designations + employee_skills for complex filtering
    - Use resolved designation values: WHERE d.title IN (resolved_designations)
    - Use resolved skill values: WHERE es.skill_name IN (resolved_skills)
    - CRITICAL: Always use SELECT DISTINCT when joining with employee_skills to avoid duplicate employees
    - Consider using LIMIT for "find couple of" or "find 3" type requests
 
+9. EMPLOYEE ORGANIZATION QUERIES (PRECISE TERMS):
+   - These are PRECISE database field mappings, not fuzzy terms
+   - Employee Groups: "KD India" → 'KD_INDIA', "KD US" → 'KD_US', "Dev Partner" → 'DEV_PARTNER'
+   - Employee Types: "contractors" → 'CONTRACTOR', "full-time" → 'FULL_TIME', "consultants" → 'CONSULTANT', "interns" → 'INTERN'
+   - Locations: "Bangalore", "New York", "Remote" → Direct string matching
+   - Organization names: Direct string matching for company names
+   
+   Examples:
+   - "Show me KD India employees" → WHERE e.employee_group = 'KD_INDIA'
+   - "Find contractors in Bangalore" → WHERE e.employee_type = 'CONTRACTOR' AND e.location = 'Bangalore'
+   - "List remote workers" → WHERE e.location = 'Remote'
+   - "Show full-time employees" → WHERE e.employee_type = 'FULL_TIME'
+
+10. FINANCIAL QUERIES (MIXED - PRECISE FIELDS, FUZZY QUALIFIERS):
+    - PRECISE: Specific financial fields and exact values
+    - FUZZY: Subjective qualifiers like "expensive", "cheap", "high", "low"
+    - Use cost_per_hour for employee internal costs
+    - Use billing_rate for client billing rates
+    - Use hourly_rate (allocations) for project-specific rates
+    - Use monthly_cost (allocations) for allocation costs
+    - Use project_cost for total project costs
+    - Use monthly_cost (projects) for project monthly costs
+    
+    Examples:
+    - "Show employees with billing rate > 100" → PRECISE (exact threshold)
+    - "Show employees with high billing rates" → FUZZY ("high" needs resolution)
+    - "What's the cost of Mobile Banking App?" → PRECISE (specific project + cost field)
+    - "Show monthly costs by organization" → PRECISE (specific fields)
+    - "Find expensive contractors" → FUZZY ("expensive" needs threshold resolution)
+    - "Total allocation costs for active projects" → PRECISE (specific calculation)
+
+11. PROJECT MANAGEMENT QUERIES (MIXED - PRECISE FIELDS, FUZZY CONCEPTS):
+    - PRECISE: Specific project names, customer names, exact dates
+    - FUZZY: Vague concepts like "who manages", relative time like "this month"
+    - Use project_manager_id to find project managers
+    - Use customer_name for client information
+    - Use start_date/end_date for project timelines
+    - Join with employees to get manager details
+    
+    Examples:
+    - "Who manages the Healthcare Management System?" → FUZZY ("manages" concept) + PRECISE (specific project name)
+    - "Show projects for RetailCorp Inc" → PRECISE (specific customer name)
+    - "Projects ending this month" → FUZZY (relative time "this month")
+    - "Show project managers and their projects" → PRECISE (specific role + relationship)
+
+12. ORGANIZATION HEADCOUNT QUERIES:
+    - Keywords: "headcount", "percentage", "share", "distribution", "breakdown"
+    - Use employee_group for organization-wise analysis
+    - Calculate percentages using COUNT() and GROUP BY
+    - Show distribution across projects, skills, or roles
+    
+    Examples:
+    - "Show headcount by organization" → GROUP BY e.employee_group, COUNT(*)
+    - "KD India percentage in each project" → Calculate (KD_INDIA_count / total_count) * 100 per project
+    - "Organization distribution for React developers" → GROUP BY e.employee_group WHERE es.skill_name = 'React'
+
 INSERT PATTERNS:
-8. PROJECT CREATION:
-   - INSERT INTO projects (name, duration_months, project_type, status, ...)
-   - Set default values: status='planning', project_type='customer'
-   - Generate UUID for id field
+13. PROJECT CREATION:
+    - INSERT INTO projects (name, duration_months, project_type, status, customer_name, ...)
+    - Set default values: status='planning', project_type='customer'
+    - Generate UUID for id field
+    - Include customer_name, project_cost, start_date, end_date when provided
 
 UPDATE PATTERNS:
-9. ALLOCATION UPDATES:
-   - UPDATE allocations SET percent_allocated = ... WHERE employee_id = ... AND project_id = ...
-   - Convert percentage numbers to enum values (25→'QUARTER', 50→'HALF', 75→'THREE_QUARTER', 100→'FULL')
-   - Use employee email or name to find employee_id
-   - Use project name to find project_id
+14. ALLOCATION UPDATES:
+    - UPDATE allocations SET percent_allocated = ... WHERE employee_id = ... AND project_id = ...
+    - Convert percentage numbers to enum values (25→'QUARTER', 50→'HALF', 75→'THREE_QUARTER', 100→'FULL')
+    - Use employee email or name to find employee_id
+    - Use project name to find project_id
+    - Update hourly_rate and monthly_cost when changing allocations
 
 DELETE PATTERNS:
-10. RECORD REMOVAL:
+15. RECORD REMOVAL:
     - Always use specific WHERE clauses to avoid accidental mass deletions
     - Prefer soft deletes (UPDATE is_active = false) over hard deletes when possible
 
@@ -290,10 +368,70 @@ User Query: "Who is available at least 50% next week?"
 Analysis: FUTURE PARTIAL AVAILABILITY → Check employees with ≤ 50% allocation next week
 SQL: SELECT e.name, e.email FROM employees e WHERE e.is_active = TRUE AND e.id NOT IN (SELECT a.employee_id FROM allocations a WHERE a.status = 'active' AND a.start_date <= (CURRENT_DATE + INTERVAL '1 week') AND a.end_date >= (CURRENT_DATE + INTERVAL '1 week') GROUP BY a.employee_id HAVING SUM(CAST(a.percent_allocated AS INTEGER)) > 50);
 
+Example 7b - Timeline-based Availability Query:
+User Query: "When will Cameron Brown be partially available?"
+Analysis: TIMELINE AVAILABILITY → Show current allocation status and when allocations end to determine future availability
+SQL: SELECT 
+    e.name,
+    e.email,
+    COALESCE(SUM(CAST(a.percent_allocated AS INTEGER)), 0) as current_allocation,
+    CASE 
+        WHEN COALESCE(SUM(CAST(a.percent_allocated AS INTEGER)), 0) < 100 THEN 'Available now'
+        ELSE MIN(a.end_date)::text
+    END as available_from,
+    CASE 
+        WHEN COALESCE(SUM(CAST(a.percent_allocated AS INTEGER)), 0) < 100 THEN (100 - COALESCE(SUM(CAST(a.percent_allocated AS INTEGER)), 0))
+        ELSE NULL
+    END as percent_available_now
+FROM employees e
+LEFT JOIN allocations a ON e.id = a.employee_id AND a.status = 'ACTIVE' AND a.end_date >= CURRENT_DATE
+WHERE e.name = 'Cameron Brown' AND e.is_active = TRUE
+GROUP BY e.id, e.name, e.email;
+
 Example 8 - Complex Project Query:
 User Query: "Find experienced backend engineers working on customer projects"
 Resolved Terms: {{"experienced": ["Senior Software Engineer", "Technical Lead"], "backend": ["Java", "Python", "Node.js"]}}
-SQL: SELECT DISTINCT e.name, d.title, p.project_name FROM employees e JOIN designations d ON e.designation_id = d.id JOIN employee_skills es ON e.id = es.employee_id JOIN allocations a ON e.id = a.employee_id JOIN projects p ON a.project_id = p.id WHERE d.title IN ('Senior Software Engineer', 'Technical Lead') AND es.skill_name IN ('Java', 'Python', 'Node.js') AND p.project_type = 'customer' AND a.status = 'active';
+SQL: SELECT DISTINCT e.name, d.title, p.name FROM employees e JOIN designations d ON e.designation_id = d.id JOIN employee_skills es ON e.id = es.employee_id JOIN allocations a ON e.id = a.employee_id JOIN projects p ON a.project_id = p.id WHERE d.title IN ('Senior Software Engineer', 'Technical Lead') AND es.skill_name IN ('Java', 'Python', 'Node.js') AND p.project_type = 'customer' AND a.status = 'active';
+
+Example 9 - Organization Query (PRECISE):
+User Query: "Show me KD India contractors in Bangalore"
+Analysis: PRECISE query → All terms map directly to database fields (no fuzzy resolution needed)
+SQL: SELECT e.name, e.email, d.title, e.location FROM employees e JOIN designations d ON e.designation_id = d.id WHERE e.employee_group = 'KD_INDIA' AND e.employee_type = 'CONTRACTOR' AND e.location = 'Bangalore' AND e.is_active = TRUE;
+
+Example 10 - Financial Query (PRECISE):
+User Query: "What's the total monthly cost of the Mobile Banking App project?"
+Analysis: PRECISE query → Specific project name + specific cost fields (no fuzzy resolution needed)
+SQL: SELECT p.name, p.monthly_cost as project_monthly_cost, SUM(a.monthly_cost) as allocation_monthly_cost FROM projects p LEFT JOIN allocations a ON p.id = a.project_id WHERE p.name = 'Mobile Banking App' AND a.status = 'active' GROUP BY p.id, p.name, p.monthly_cost;
+
+Example 11 - Project Management Query (MIXED):
+User Query: "Who manages the Healthcare Management System project?"
+Analysis: MIXED query → "manages" is fuzzy concept, "Healthcare Management System" is precise project name
+SQL: SELECT p.name as project_name, e.name as manager_name, e.email, d.title FROM projects p JOIN employees e ON p.project_manager_id = e.id JOIN designations d ON e.designation_id = d.id WHERE p.name = 'Healthcare Management System';
+
+Example 11b - Employee Projects Query (COMPREHENSIVE):
+User Query: "Give me all projects of Tyler Hall"
+Analysis: COMPREHENSIVE EMPLOYEE-PROJECT query → Find ALL projects where Tyler is involved (as manager OR as allocated team member)
+SQL: SELECT DISTINCT p.id, p.name, p.description, p.status, p.customer_name,
+       CASE 
+         WHEN p.project_manager_id = e.id THEN 'Project Manager'
+         WHEN a.employee_id IS NOT NULL THEN 'Team Member'
+         ELSE 'Unknown'
+       END as role,
+       a.percent_allocated,
+       a.start_date as allocation_start,
+       a.end_date as allocation_end
+FROM employees e
+LEFT JOIN projects p ON (p.project_manager_id = e.id OR p.id IN (
+    SELECT a2.project_id FROM allocations a2 WHERE a2.employee_id = e.id AND a2.status = 'active'
+))
+LEFT JOIN allocations a ON (a.employee_id = e.id AND a.project_id = p.id AND a.status = 'active')
+WHERE e.name = 'Tyler Hall' AND e.is_active = TRUE AND p.id IS NOT NULL
+ORDER BY p.name;
+
+Example 12 - Organization Headcount Query:
+User Query: "Show me the percentage of KD India headcount for each active project"
+Analysis: ORGANIZATION HEADCOUNT query → Calculate percentage by employee_group per project
+SQL: SELECT p.name, COUNT(*) as total_employees, SUM(CASE WHEN e.employee_group = 'KD_INDIA' THEN 1 ELSE 0 END) as kd_india_count, ROUND((SUM(CASE WHEN e.employee_group = 'KD_INDIA' THEN 1 ELSE 0 END) * 100.0 / COUNT(*)), 2) as kd_india_percentage FROM projects p JOIN allocations a ON p.id = a.project_id JOIN employees e ON a.employee_id = e.id WHERE p.status = 'active' AND a.status = 'active' GROUP BY p.id, p.name ORDER BY kd_india_percentage DESC;
 
 RESPONSE FORMAT:
 - Return ONLY the SQL query

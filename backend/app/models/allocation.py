@@ -2,11 +2,10 @@
 
 import uuid
 
-from sqlalchemy import UUID, Column, Date, Enum, ForeignKey, Integer, UniqueConstraint
-from sqlalchemy.orm import relationship
-
 from app.models.base import BaseModel
 from app.models.enums import AllocationPercentage, AllocationStatus
+from sqlalchemy import UUID, Column, Date, Enum, ForeignKey, Integer, Numeric, UniqueConstraint
+from sqlalchemy.orm import relationship
 
 
 class Allocation(BaseModel):
@@ -25,6 +24,10 @@ class Allocation(BaseModel):
     # Status tracking
     status = Column(Enum(AllocationStatus), default=AllocationStatus.ACTIVE, index=True)
 
+    # Financial tracking
+    hourly_rate = Column(Numeric(10, 2), nullable=True)  # Rate for this specific allocation
+    monthly_cost = Column(Numeric(12, 2), nullable=True)  # Monthly cost for this allocation
+
     # Relationships
     project = relationship("Project", back_populates="allocations")
     employee = relationship("Employee", back_populates="allocations")
@@ -37,5 +40,5 @@ class Allocation(BaseModel):
     def __repr__(self):
         return (
             f"<Allocation(id={self.id}, employee_id={self.employee_id}, "
-            f"project_id={self.project_id}, percent={self.percent_allocated.value}%)>"
+            f"project_id={self.project_id}, percent={self.percent_allocated}%)>"
         )
