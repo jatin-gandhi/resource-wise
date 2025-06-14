@@ -34,7 +34,7 @@ class QueryAgent(BaseAgent):
         # Note: api_key will be automatically picked up from OPENAI_API_KEY env var
         self.llm = ChatOpenAI(
             model=self.config.model_name,
-            temperature=0.0,
+            temperature=0.5,
             verbose=settings.DEBUG,
             api_key=self.config.api_key,
         )

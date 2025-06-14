@@ -16,6 +16,9 @@ class AgentStateDict(TypedDict):
     current_stage: str
     error: str | None
 
+    query_details: dict[str, Any] | None
+    database_result: dict[str, Any] | None
+
     # Agent outputs
     query_result: dict[str, Any] | None
 
