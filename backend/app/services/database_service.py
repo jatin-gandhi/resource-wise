@@ -45,7 +45,8 @@ class DatabaseService:
                 result = await session.execute(text(sql_query), params or {})
 
                 # Handle different query types
-                if sql_query.strip().upper().startswith("SELECT"):
+                query_upper = sql_query.strip().upper()
+                if query_upper.startswith("SELECT") or query_upper.startswith("WITH"):
                     return await self._handle_select_query(result, start_time)
                 else:
                     # For INSERT/UPDATE/DELETE operations

@@ -219,6 +219,50 @@ SELECT PATTERNS:
    - Include current allocation percentage and future availability percentage
    - Filter allocations by a.end_date >= CURRENT_DATE to only consider current/future allocations
    
+   MONTHLY TIME-SERIES AVAILABILITY QUERIES:
+   - Keywords: "last X months", "every month", "monthly availability", "month by month"
+   - Generate a time series for the requested months
+   - Calculate availability for each month separately
+   - Use date range overlaps for each month: (month_start <= a.end_date AND month_end >= a.start_date)
+   - Use WITH clause to generate month series, then LEFT JOIN with allocations
+   - Show month, year, total_allocation, and availability_percentage for each month
+   
+   EXAMPLE MONTHLY SERIES QUERY:
+   - "Last 6 months availability of Cameron Brown (every month)" →
+     WITH month_series AS (
+       SELECT 
+         EXTRACT(YEAR FROM generate_series::date) as year,
+         EXTRACT(MONTH FROM generate_series::date) as month,
+         DATE_TRUNC('month', generate_series::date) as month_start,
+         (DATE_TRUNC('month', generate_series::date) + INTERVAL '1 month - 1 day')::date as month_end
+       FROM generate_series(
+         DATE_TRUNC('month', CURRENT_DATE - INTERVAL '5 months')::date,
+         DATE_TRUNC('month', CURRENT_DATE)::date,
+         '1 month'::interval
+       )
+     )
+     SELECT 
+       ms.year,
+       ms.month,
+       TO_CHAR(ms.month_start, 'Month YYYY') as month_name,
+       COALESCE(SUM(CAST(a.percent_allocated AS INTEGER)), 0) as total_allocation,
+       (100 - COALESCE(SUM(CAST(a.percent_allocated AS INTEGER)), 0)) as availability_percent
+     FROM month_series ms
+     CROSS JOIN employees e
+     LEFT JOIN allocations a ON e.id = a.employee_id 
+       AND a.status = 'active'
+       AND ms.month_start <= a.end_date 
+       AND ms.month_end >= a.start_date
+     WHERE e.name = 'Cameron Brown' AND e.is_active = TRUE
+     GROUP BY ms.year, ms.month, ms.month_start
+     ORDER BY ms.year, ms.month;
+     
+   CRITICAL NOTES FOR MONTHLY QUERIES:
+   - Always use CAST(a.percent_allocated AS INTEGER) for calculations
+   - In GROUP BY, only include base columns, not computed columns like TO_CHAR()
+   - Use generate_series() function for PostgreSQL time series generation
+   - Date overlap logic: month_start <= a.end_date AND month_end >= a.start_date
+   
    - CRITICAL: Never use aggregate functions like SUM() in WHERE clause - always use HAVING with GROUP BY
    - Always include `e.is_active = TRUE` for active employees only
 
@@ -239,10 +283,72 @@ SELECT PATTERNS:
      → Focus on project_manager_id relationship only
 
 7. RESOURCE UTILIZATION QUERIES:
-   - Join allocations + employees + projects for utilization analysis
-   - Use SUM(CAST(a.percent_allocated AS INTEGER)) for total allocation calculations
-   - GROUP BY employee or project for aggregated views
-   - Filter by project_type = 'customer' for customer project utilization
+   - "resource utilization", "utilization of [group]", "% resources used", "[person] utilization"
+   - CRITICAL: Resource utilization = (Sum of allocated percentages) / (Total capacity) × 100%
+   
+   GROUP UTILIZATION (Multiple employees):
+   - Formula: (Sum of allocated percentages) / (Total employees × 100%) × 100%
+   - Use LEFT JOIN to include all employees (allocated and unallocated)
+   - Use COUNT(DISTINCT e.id) for total employee count
+   - Can combine multiple filters: employee_group + employee_type + location, etc.
+   
+   INDIVIDUAL EMPLOYEE UTILIZATION:
+   - Formula: (Sum of allocated percentages) / (Employee capacity) × 100%
+   - Default capacity = 100% unless specified otherwise
+   - For time periods: Filter allocations by date range
+   - Use SUM(CAST(a.percent_allocated AS INTEGER)) for individual total allocation
+   
+   TIME-BASED UTILIZATION:
+   - Keywords: "for month [month]", "in [month]", "during [period]"
+   - Filter allocations by date overlaps with the specified period
+   - Use date range conditions: a.start_date <= period_end AND a.end_date >= period_start
+   - For monthly queries: Use EXTRACT(MONTH FROM date) and EXTRACT(YEAR FROM date)
+   
+   EXAMPLES:
+   
+   - "Resource utilization of KD India" → 
+     SELECT ROUND((SUM(CAST(a.percent_allocated AS INTEGER)) * 100.0 / (COUNT(DISTINCT e.id) * 100)), 2) as resource_utilization_percent
+     FROM employees e LEFT JOIN allocations a ON e.id = a.employee_id AND a.status = 'active'
+     WHERE e.employee_group = 'KD_INDIA' AND e.is_active = TRUE;
+   
+   - "KD India contractors utilization" →
+     SELECT ROUND((SUM(CAST(a.percent_allocated AS INTEGER)) * 100.0 / (COUNT(DISTINCT e.id) * 100)), 2) as resource_utilization_percent
+     FROM employees e LEFT JOIN allocations a ON e.id = a.employee_id AND a.status = 'active'
+     WHERE e.employee_group = 'KD_INDIA' AND e.employee_type = 'CONTRACTOR' AND e.is_active = TRUE;
+   
+   - "James utilization" (assuming 100% capacity) →
+     SELECT e.name, ROUND(SUM(CAST(a.percent_allocated AS INTEGER)), 2) as utilization_percent
+     FROM employees e LEFT JOIN allocations a ON e.id = a.employee_id AND a.status = 'active'
+     WHERE e.name = 'James' AND e.is_active = TRUE
+     GROUP BY e.id, e.name;
+   
+   - "James utilization for June" →
+     SELECT e.name, ROUND(SUM(CAST(a.percent_allocated AS INTEGER)), 2) as utilization_percent
+     FROM employees e LEFT JOIN allocations a ON e.id = a.employee_id AND a.status = 'active'
+     WHERE e.name = 'James' AND e.is_active = TRUE
+     AND (a.start_date <= '2024-06-30' AND a.end_date >= '2024-06-01')
+     GROUP BY e.id, e.name;
+   
+   - "James utilization for June with 50% capacity" →
+     SELECT e.name, ROUND((SUM(CAST(a.percent_allocated AS INTEGER)) * 100.0 / 50), 2) as utilization_percent
+     FROM employees e LEFT JOIN allocations a ON e.id = a.employee_id AND a.status = 'active'
+     WHERE e.name = 'James' AND e.is_active = TRUE
+     AND (a.start_date <= '2024-06-30' AND a.end_date >= '2024-06-01')
+     GROUP BY e.id, e.name;
+   
+   UTILIZATION INTERPRETATION:
+   - Group queries: Always use LEFT JOIN to include unallocated employees
+   - Individual queries: Show actual allocation percentage (can exceed 100% for overallocation)
+   - Time-based queries: Filter by date range overlap
+   - Capacity-based queries: Divide by custom capacity instead of 100%
+   - Always use CAST(a.percent_allocated AS INTEGER) for calculations
+   
+   CAPACITY HANDLING:
+   - Default capacity: 100% (full-time equivalent)
+   - Custom capacity: When user specifies reduced capacity (e.g., "50% capacity", "part-time")
+   - Look for capacity clues in query: "with 50% capacity", "part-time", "0.5 FTE"
+   - If capacity specified: ROUND((SUM(allocated) * 100.0 / custom_capacity), 2)
+   - If no capacity specified: ROUND(SUM(allocated), 2) for individuals
 
 8. SKILL-BASED EMPLOYEE SEARCH WITH FUZZY TERMS:
    - Join employees + designations + employee_skills for complex filtering
@@ -308,14 +414,14 @@ SELECT PATTERNS:
     - "Organization distribution for React developers" → GROUP BY e.employee_group WHERE es.skill_name = 'React'
 
 INSERT PATTERNS:
-13. PROJECT CREATION:
+14. PROJECT CREATION:
     - INSERT INTO projects (name, duration_months, project_type, status, customer_name, ...)
     - Set default values: status='planning', project_type='customer'
     - Generate UUID for id field
     - Include customer_name, project_cost, start_date, end_date when provided
 
 UPDATE PATTERNS:
-14. ALLOCATION UPDATES:
+15. ALLOCATION UPDATES:
     - UPDATE allocations SET percent_allocated = ... WHERE employee_id = ... AND project_id = ...
     - Convert percentage numbers to enum values (25→'QUARTER', 50→'HALF', 75→'THREE_QUARTER', 100→'FULL')
     - Use employee email or name to find employee_id
@@ -323,7 +429,7 @@ UPDATE PATTERNS:
     - Update hourly_rate and monthly_cost when changing allocations
 
 DELETE PATTERNS:
-15. RECORD REMOVAL:
+16. RECORD REMOVAL:
     - Always use specific WHERE clauses to avoid accidental mass deletions
     - Prefer soft deletes (UPDATE is_active = false) over hard deletes when possible
 
@@ -388,6 +494,37 @@ LEFT JOIN allocations a ON e.id = a.employee_id AND a.status = 'ACTIVE' AND a.en
 WHERE e.name = 'Cameron Brown' AND e.is_active = TRUE
 GROUP BY e.id, e.name, e.email;
 
+Example 7c - Monthly Time-Series Availability Query:
+User Query: "Give me last 6 months availability of Cameron Brown (every month)"
+Analysis: MONTHLY TIME-SERIES AVAILABILITY → Generate month series and calculate availability for each month
+SQL: WITH month_series AS (
+    SELECT 
+        EXTRACT(YEAR FROM generate_series::date) as year,
+        EXTRACT(MONTH FROM generate_series::date) as month,
+        DATE_TRUNC('month', generate_series::date) as month_start,
+        (DATE_TRUNC('month', generate_series::date) + INTERVAL '1 month - 1 day')::date as month_end
+    FROM generate_series(
+        DATE_TRUNC('month', CURRENT_DATE - INTERVAL '5 months')::date,
+        DATE_TRUNC('month', CURRENT_DATE)::date,
+        '1 month'::interval
+    )
+)
+SELECT 
+    ms.year,
+    ms.month,
+    TO_CHAR(ms.month_start, 'Month YYYY') as month_name,
+    COALESCE(SUM(CAST(a.percent_allocated AS INTEGER)), 0) as total_allocation,
+    (100 - COALESCE(SUM(CAST(a.percent_allocated AS INTEGER)), 0)) as availability_percent
+FROM month_series ms
+CROSS JOIN employees e
+LEFT JOIN allocations a ON e.id = a.employee_id 
+    AND a.status = 'active'
+    AND ms.month_start <= a.end_date 
+    AND ms.month_end >= a.start_date
+WHERE e.name = 'Cameron Brown' AND e.is_active = TRUE
+GROUP BY ms.year, ms.month, ms.month_start
+ORDER BY ms.year, ms.month;
+
 Example 8 - Complex Project Query:
 User Query: "Find experienced backend engineers working on customer projects"
 Resolved Terms: {{"experienced": ["Senior Software Engineer", "Technical Lead"], "backend": ["Java", "Python", "Node.js"]}}
@@ -428,7 +565,27 @@ LEFT JOIN allocations a ON (a.employee_id = e.id AND a.project_id = p.id AND a.s
 WHERE e.name = 'Tyler Hall' AND e.is_active = TRUE AND p.id IS NOT NULL
 ORDER BY p.name;
 
-Example 12 - Organization Headcount Query:
+Example 12 - Group Resource Utilization Query:
+User Query: "Give me resource utilization of KD India"
+Analysis: GROUP RESOURCE UTILIZATION query → Calculate (total allocated %) / (total employees × 100%) × 100%
+SQL: SELECT ROUND((SUM(CAST(a.percent_allocated AS INTEGER)) * 100.0 / (COUNT(DISTINCT e.id) * 100)), 2) as resource_utilization_percent FROM employees e LEFT JOIN allocations a ON e.id = a.employee_id AND a.status = 'active' WHERE e.employee_group = 'KD_INDIA' AND e.is_active = TRUE;
+
+Example 12b - Filtered Group Resource Utilization Query:
+User Query: "KD India contractors utilization"
+Analysis: FILTERED GROUP UTILIZATION query → Combine employee_group + employee_type filters
+SQL: SELECT ROUND((SUM(CAST(a.percent_allocated AS INTEGER)) * 100.0 / (COUNT(DISTINCT e.id) * 100)), 2) as resource_utilization_percent FROM employees e LEFT JOIN allocations a ON e.id = a.employee_id AND a.status = 'active' WHERE e.employee_group = 'KD_INDIA' AND e.employee_type = 'CONTRACTOR' AND e.is_active = TRUE;
+
+Example 12c - Individual Employee Utilization Query:
+User Query: "James utilization"
+Analysis: INDIVIDUAL UTILIZATION query → Calculate total allocation percentage for specific employee
+SQL: SELECT e.name, ROUND(SUM(CAST(a.percent_allocated AS INTEGER)), 2) as utilization_percent FROM employees e LEFT JOIN allocations a ON e.id = a.employee_id AND a.status = 'active' WHERE e.name = 'James' AND e.is_active = TRUE GROUP BY e.id, e.name;
+
+Example 12d - Time-based Individual Utilization Query:
+User Query: "James utilization for month June"
+Analysis: TIME-BASED INDIVIDUAL UTILIZATION query → Filter allocations by date range for specific month
+SQL: SELECT e.name, ROUND(SUM(CAST(a.percent_allocated AS INTEGER)), 2) as utilization_percent FROM employees e LEFT JOIN allocations a ON e.id = a.employee_id AND a.status = 'active' WHERE e.name = 'James' AND e.is_active = TRUE AND (a.start_date <= '2024-06-30' AND a.end_date >= '2024-06-01') GROUP BY e.id, e.name;
+
+Example 13 - Organization Headcount Query:
 User Query: "Show me the percentage of KD India headcount for each active project"
 Analysis: ORGANIZATION HEADCOUNT query → Calculate percentage by employee_group per project
 SQL: SELECT p.name, COUNT(*) as total_employees, SUM(CASE WHEN e.employee_group = 'KD_INDIA' THEN 1 ELSE 0 END) as kd_india_count, ROUND((SUM(CASE WHEN e.employee_group = 'KD_INDIA' THEN 1 ELSE 0 END) * 100.0 / COUNT(*)), 2) as kd_india_percentage FROM projects p JOIN allocations a ON p.id = a.project_id JOIN employees e ON a.employee_id = e.id WHERE p.status = 'active' AND a.status = 'active' GROUP BY p.id, p.name ORDER BY kd_india_percentage DESC;

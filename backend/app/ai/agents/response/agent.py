@@ -5,9 +5,8 @@ from typing import Any
 import structlog
 from app.ai.agents.base import BaseAgent
 from app.ai.core.config import AIConfig
+from app.ai.prompts.response_prompts import ResponsePrompts
 from app.core.config import settings
-from app.schemas.ai import QueryRequest
-from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
 
 logger = structlog.get_logger()
@@ -28,94 +27,14 @@ class ResponseAgent(BaseAgent):
         # Note: api_key will be automatically picked up from OPENAI_API_KEY env var
         self.llm = ChatOpenAI(
             model=self.config.model_name,
-            temperature=0.3,  # Slightly higher temperature for more natural responses
+            temperature=0.5,  # Slightly higher temperature for more natural responses
             verbose=settings.DEBUG,
             api_key=self.config.api_key,
         )
 
-        # Response generation prompt
-        self.response_generation_prompt = PromptTemplate(
-            input_variables=["original_query", "db_results", "query_context", "result_count"],
-            template="""You are ResourceWise AI Assistant, an expert in analyzing and explaining resource allocation data.
-
-Your task is to convert database query results into natural, conversational responses that are helpful and insightful.
-
-**Original User Query:** "{original_query}"
-
-**Database Results:** {db_results}
-
-**Query Context:**
-- Query Type: {query_context}
-- Number of Results: {result_count}
-
-**Response Guidelines:**
-
-1. **Be Conversational & Natural**
-   - Start with phrases like "I found...", "Here's what I discovered...", "Based on your query..."
-   - Avoid robotic language like "Query executed successfully"
-
-2. **Provide Context & Insights**
-   - Explain what the data means in business terms
-   - Highlight interesting patterns or outliers
-   - Relate findings back to resource allocation implications
-
-3. **Format for Readability**
-   - Use bullet points or numbered lists for multiple results
-   - Bold important information like names, percentages, dates
-   - Keep individual items concise but informative
-
-4. **Handle Different Scenarios:**
-   - **Multiple Results:** Group similar items, highlight key differences
-   - **Single Result:** Provide detailed breakdown of that item
-   - **No Results:** Explain possible reasons and suggest alternatives
-   - **Large Result Sets:** Summarize key patterns and show representative examples
-
-5. **Add Actionable Insights**
-   - For availability queries: Mention who might be good candidates for new projects
-   - For skill searches: Note experience levels and current commitments
-   - For overallocation: Explain potential risks and recommendations
-   - For project data: Highlight timelines, capacity, and team composition
-
-6. **Business Context Examples:**
-   - "Sarah has 25% availability, making her a good candidate for a new project"
-   - "Most of these developers are currently under-allocated, which is great for project planning"
-   - "The Mobile Banking App team is fully allocated until March"
-   - "I notice several Senior Engineers with React skills are available"
-
-**Response Format:**
-- Start with a clear, conversational opening
-- Present the main findings in an organized way
-- End with actionable insights or next steps when appropriate
-- Keep technical details minimal unless specifically requested
-
-Generate a helpful, natural response:""",
-        )
-
-        # Error response prompt
-        self.error_response_prompt = PromptTemplate(
-            input_variables=["original_query", "error_details", "error_type"],
-            template="""You are ResourceWise AI Assistant. You need to explain a database error in user-friendly terms.
-
-**User Query:** "{original_query}"
-**Error Type:** {error_type}
-**Error Details:** {error_details}
-
-**Task:** Convert this technical error into a helpful, user-friendly message.
-
-**Guidelines:**
-1. **Be Empathetic:** Acknowledge the user's request
-2. **Explain Simply:** Avoid technical jargon
-3. **Suggest Alternatives:** When possible, suggest what they could try instead
-4. **Stay Positive:** Focus on what you can help with
-
-**Common Error Types:**
-- **No Results:** "I couldn't find anyone matching those criteria. You might try..."
-- **Too Many Results:** "I found a lot of matches. Could you be more specific about..."
-- **Permission Issues:** "I don't have access to that information, but I can help you with..."
-- **Query Issues:** "I had trouble understanding that request. Could you rephrase it as..."
-
-Generate a helpful, friendly error response:""",
-        )
+        # Get prompts from prompts module
+        self.response_generation_prompt = ResponsePrompts.get_response_generation_prompt()
+        self.error_response_prompt = ResponsePrompts.get_error_response_prompt()
 
         # Initialize chains
         self.response_chain = self.response_generation_prompt | self.llm
@@ -140,12 +59,12 @@ Generate a helpful, friendly error response:""",
         Returns:
             Dictionary containing natural language response
         """
-        # logger.info(
-        #     "[RESPONSE-AGENT] Received request",
-        #     has_results=bool(input_data.get("db_results")),
-        #     success=input_data.get("success", False),
-        #     agent_type="response",
-        # )
+        logger.info(
+            "[RESPONSE-AGENT] Received request",
+            has_results=bool(input_data.get("db_results")),
+            success=input_data.get("success", False),
+            agent_type="response",
+        )
 
         try:
             # Check if this is an error case
@@ -189,15 +108,27 @@ Generate a helpful, friendly error response:""",
         try:
             result_count = len(db_results)
 
-            # logger.info(
-            #     "[RESPONSE-AGENT] Generating success response",
-            #     result_count=result_count,
-            #     query_type=query_context.get("query_type", "unknown"),
-            #     agent_type="response",
-            # )
+            # Debug logging to understand what we're receiving
+            logger.info(
+                "[RESPONSE-AGENT] Processing db_results",
+                result_count=result_count,
+                query_context=query_context,
+                sample_row=db_results[0] if db_results else None,
+                agent_type="response",
+            )
 
             # Prepare data for LLM (limit size to avoid token limits)
             limited_results = self._prepare_results_for_llm(db_results)
+
+            # Debug what's being sent to LLM
+            logger.info(
+                "[RESPONSE-AGENT] Prepared data for LLM",
+                formatted_length=len(limited_results),
+                formatted_preview=(
+                    limited_results[:300] + "..." if len(limited_results) > 300 else limited_results
+                ),
+                agent_type="response",
+            )
 
             # Format query context for prompt
             context_summary = self._format_query_context(query_context)
@@ -210,14 +141,30 @@ Generate a helpful, friendly error response:""",
                 "result_count": result_count,
             }
 
+            # Log exactly what we're sending to the LLM
+            logger.info(
+                "[RESPONSE-AGENT] Sending to LLM",
+                chain_input_keys=list(chain_input.keys()),
+                original_query=original_query,
+                result_count=result_count,
+                context_summary=context_summary,
+                agent_type="response",
+            )
+
             result = await self.response_chain.ainvoke(chain_input)
             natural_response = str(result.content)
 
-            # logger.info(
-            #     "[RESPONSE-AGENT] Generated natural response",
-            #     response_length=len(natural_response),
-            #     agent_type="response",
-            # )
+            # Log what the LLM returned
+            logger.info(
+                "[RESPONSE-AGENT] LLM Response received",
+                response_length=len(natural_response),
+                response_preview=(
+                    natural_response[:200] + "..."
+                    if len(natural_response) > 200
+                    else natural_response
+                ),
+                agent_type="response",
+            )
 
             return {
                 "response": natural_response,
@@ -259,12 +206,6 @@ Generate a helpful, friendly error response:""",
             error_details = input_data.get("error", "Unknown error occurred")
             error_type = input_data.get("error_type", "UNKNOWN")
 
-            # logger.info(
-            #     "[RESPONSE-AGENT] Generating error response",
-            #     error_type=error_type,
-            #     agent_type="response",
-            # )
-
             # Generate user-friendly error response
             chain_input = {
                 "original_query": original_query,
@@ -275,11 +216,11 @@ Generate a helpful, friendly error response:""",
             result = await self.error_chain.ainvoke(chain_input)
             error_response = str(result.content)
 
-            # logger.info(
-            #     "[RESPONSE-AGENT] Generated error response",
-            #     response_length=len(error_response),
-            #     agent_type="response",
-            # )
+            logger.info(
+                "[RESPONSE-AGENT] Generated error response",
+                response_length=len(error_response),
+                agent_type="response",
+            )
 
             return {
                 "response": error_response,
@@ -318,7 +259,7 @@ Generate a helpful, friendly error response:""",
         # Limit results to avoid token limits
         limited_results = db_results[:max_rows]
 
-        # Format as clean JSON-like structure
+        # Format as clean, structured data for LLM to intelligently process
         formatted_results = []
         for i, row in enumerate(limited_results, 1):
             # Clean up the row data
@@ -331,7 +272,7 @@ Generate a helpful, friendly error response:""",
                         str_value = str_value[:97] + "..."
                     clean_row[key] = str_value
 
-            formatted_results.append(f"Result {i}: {clean_row}")
+            formatted_results.append(f"Row {i}: {clean_row}")
 
         result_text = "\n".join(formatted_results)
 
