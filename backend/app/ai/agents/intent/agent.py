@@ -8,9 +8,9 @@ from app.ai.agents.base import BaseAgent
 from app.ai.core.config import AIConfig
 from app.core.config import settings
 from app.schemas.ai import QueryRequest
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 
 logger = structlog.get_logger()
 
@@ -36,11 +36,9 @@ class IntentAgent(BaseAgent):
         """
         super().__init__(config)
 
-        # Initialize LLM for intent classification using config values
-        # Note: api_key will be automatically picked up from OPENAI_API_KEY env var
         self.llm = ChatOpenAI(
             model=self.config.model_name,
-            temperature=0.3,  # Low temperature for consistent classification
+            temperature=0.1,  # Low temperature for consistent classification
             verbose=settings.DEBUG,
             api_key=self.config.api_key,
         )
@@ -120,9 +118,41 @@ TONE: Professional, helpful, and friendly. Focus on resource allocation and proj
 Response:""",
         )
 
+        # Query contextualization prompt for database queries
+        self.query_contextualization_prompt = PromptTemplate(
+            input_variables=["user_input", "chat_history"],
+            template="""You are a query contextualization assistant for ResourceWise. Your job is to take a user's query and enrich it with context from the conversation history to make it self-contained and clear.
+
+CONVERSATION HISTORY:
+{chat_history}
+
+CURRENT USER INPUT: {user_input}
+
+CONTEXTUALIZATION RULES:
+1. If the current query references previous results (like "them", "those", "the ones", "who among them"), incorporate the relevant context
+2. If the query is a follow-up question, combine it with the previous query context
+3. If the query mentions "also" or "too", include what it's building upon
+4. If pronouns or unclear references exist, replace them with specific entities from the chat history
+5. Keep the query natural and conversational, but self-contained
+6. If no contextualization is needed, return the original query unchanged
+
+EXAMPLES:
+- User asks: "Show me Python developers" → Next: "Who has React skills too?" 
+  → Contextualized: "Show me Python developers who also have React skills"
+  
+- User asks: "Find employees in Engineering" → Next: "Which ones are available this month?"
+  → Contextualized: "Find Engineering employees who are available this month"
+
+- User asks: "List active projects" → Next: "Show their team sizes"
+  → Contextualized: "Show team sizes for active projects"
+
+Return ONLY the contextualized query, nothing else:""",
+        )
+
         # Initialize chains
         self.classification_chain = self.intent_classification_prompt | self.llm
         self.response_chain = self.general_response_prompt | self.llm
+        self.contextualization_chain = self.query_contextualization_prompt | self.llm
 
     async def process(self, input_data: dict[str, Any]) -> dict[str, Any]:
         """Process user input to classify intent and generate appropriate response.
@@ -177,7 +207,18 @@ Response:""",
                     "agent_type": "intent",
                 }
             else:
-                # For database queries, just return intent - workflow will handle the rest
+                # For database queries, contextualize the query first
+                contextualized_query = await self._contextualize_query(
+                    request.query, context.get("chat_history", [])
+                )
+
+                logger.info(
+                    "[INTENT-AGENT] Query contextualized",
+                    original_query=request.query,
+                    contextualized_query=contextualized_query,
+                    agent_type="intent",
+                )
+
                 return {
                     "intent": intent_type,
                     "response": "I'll help you search the database for that information.",
@@ -186,6 +227,7 @@ Response:""",
                     "agent_type": "intent",
                     "metadata": {
                         "original_query": request.query,
+                        "contextualized_query": contextualized_query,
                         "session_id": request.session_id,
                         "user_id": request.user_id,
                     },
@@ -308,6 +350,127 @@ Response:""",
             }
 
             return fallback_responses.get(intent_type, fallback_responses[IntentType.UNKNOWN])
+
+    async def _contextualize_query(self, user_input: str, chat_history: list[BaseMessage]) -> str:
+        """Contextualize a database query using chat history.
+
+        Args:
+            user_input: Original user input
+            chat_history: Previous conversation messages
+
+        Returns:
+            Contextualized query string
+        """
+        try:
+            # If no chat history, return original query
+            if not chat_history:
+                return user_input
+
+            # Format chat history for the prompt
+            formatted_history = self._format_chat_history_for_contextualization(chat_history)
+
+            # Only contextualize if there's meaningful history and the query seems to need it
+            if not formatted_history or not self._needs_contextualization(user_input):
+                return user_input
+
+            chain_input = {
+                "user_input": user_input,
+                "chat_history": formatted_history,
+            }
+
+            result = await self.contextualization_chain.ainvoke(chain_input)
+            contextualized_query = str(result.content).strip()
+
+            # Fallback to original if contextualization failed
+            if not contextualized_query or len(contextualized_query) < 3:
+                logger.warning(
+                    "[INTENT-AGENT] Contextualization returned empty result",
+                    original=user_input,
+                    agent_type="intent",
+                )
+                return user_input
+
+            return contextualized_query
+
+        except Exception as e:
+            logger.error(
+                "[INTENT-AGENT] Error contextualizing query",
+                error=str(e),
+                user_input=user_input,
+                agent_type="intent",
+            )
+            # Fallback to original query if contextualization fails
+            return user_input
+
+    def _needs_contextualization(self, user_input: str) -> bool:
+        """Check if a query likely needs contextualization.
+
+        Args:
+            user_input: User's input query
+
+        Returns:
+            True if query likely needs contextualization
+        """
+        # Convert to lowercase for checking
+        query_lower = user_input.lower()
+
+        # Indicators that contextualization might be needed
+        contextual_indicators = [
+            # Pronouns referring to previous results
+            "them",
+            "those",
+            "these",
+            "it",
+            "they",
+            # Reference words
+            "who among",
+            "which ones",
+            "the ones",
+            # Continuation words
+            "also",
+            "too",
+            "as well",
+            "additionally",
+            # Follow-up indicators
+            "what about",
+            "how about",
+            "and",
+            # Comparative/related
+            "their",
+            "its",
+            "his",
+            "her",
+        ]
+
+        return any(indicator in query_lower for indicator in contextual_indicators)
+
+    def _format_chat_history_for_contextualization(self, chat_history: list[BaseMessage]) -> str:
+        """Format chat history for contextualization prompt.
+
+        Args:
+            chat_history: List of chat messages
+
+        Returns:
+            Formatted history string
+        """
+        if not chat_history:
+            return ""
+
+        formatted_messages = []
+
+        # Only include the last few exchanges to avoid overwhelming the prompt
+        recent_history = chat_history[-6:]  # Last 3 exchanges (user + assistant)
+
+        for message in recent_history:
+            if isinstance(message, HumanMessage):
+                formatted_messages.append(f"Human: {message.content}")
+            elif isinstance(message, AIMessage):
+                formatted_messages.append(f"Assistant: {message.content}")
+            elif hasattr(message, "content"):
+                # Generic message type
+                formatted_messages.append(f"Message: {message.content}")
+
+        return "\n".join(formatted_messages)
 
     def _format_context(self, context: dict[str, Any]) -> str:
         """Format context for prompt inclusion.

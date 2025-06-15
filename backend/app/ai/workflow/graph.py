@@ -143,20 +143,28 @@ class AgentWorkflow:
             Updated state
         """
         try:
-            # logger.info(
-            #     "Starting query generation",
-            #     user_input=state["user_input"],
-            #     session_id=state["session_id"],
-            # )
-
             # Get the intent result from previous step
             intent_result = state["query_result"]
             if not intent_result:
                 raise ValueError("No intent classification result available")
 
-            # Prepare input for query agent using raw natural language
+            # Use contextualized query if available, otherwise fall back to original input
+            query_to_use = state["user_input"]
+            intent_metadata = intent_result.get("metadata", {})
+            if "contextualized_query" in intent_metadata:
+                query_to_use = intent_metadata["contextualized_query"]
+                logger.info(
+                    "Using contextualized query from Intent Agent",
+                    original_query=state["user_input"],
+                    contextualized_query=query_to_use,
+                    session_id=state["session_id"],
+                )
+
+            logger.info(f"query_to_use: {query_to_use}")
+
+            # Prepare input for query agent using contextualized query
             input_data = {
-                "query": state["user_input"],
+                "query": query_to_use,
                 "session_id": state["session_id"],
                 "user_id": state["context"].get("user_id"),
                 "metadata": {},  # Query agent handles parameter extraction internally
@@ -171,13 +179,7 @@ class AgentWorkflow:
             state["query_details"] = query_result
             state["current_stage"] = "query_generated"
 
-            # logger.info(
-            #     "Query generation completed",
-            #     has_sql_query=bool(query_result.get("query")),
-            #     query_type=query_result.get("query_type", "unknown"),
-            #     session_id=state["session_id"],
-            # )
-            # logger.info(f"state: {state}")
+            logger.info(f"state: {state}")
             return state
 
         except Exception as e:
