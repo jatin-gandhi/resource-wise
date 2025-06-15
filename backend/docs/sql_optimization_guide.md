@@ -26,9 +26,10 @@ WHERE es.skill_name IN ('React', 'JavaScript', 'Python');
 
 ### ✅ Optimized Solutions
 
-#### Solution 1: EXISTS Subquery (Recommended)
+#### Solution 1: EXISTS Subquery (For Employee Filtering Only)
 ```sql
 -- GOOD: One row per employee, optimal performance
+-- Use when you DON'T need skill details in the result
 SELECT e.name, d.title 
 FROM employees e 
 JOIN designations d ON e.designation_id = d.id 
@@ -40,16 +41,32 @@ AND EXISTS (
 );
 ```
 
-#### Solution 2: GROUP BY (When JOIN is necessary)
+#### Solution 2: JOIN + GROUP BY (When You Need Skill Details)
 ```sql
--- ACCEPTABLE: When you need skill details
-SELECT e.name, d.title, COUNT(es.skill_name) as matching_skills
+-- GOOD: When you need skill details in the result
+-- Prevents duplicates with proper GROUP BY
+SELECT e.name, d.title, 
+       STRING_AGG(es.skill_name, ', ') as skills,
+       STRING_AGG(es.experience_months::text, ', ') as experience_months
 FROM employees e 
 JOIN designations d ON e.designation_id = d.id 
 JOIN employee_skills es ON e.id = es.employee_id 
 WHERE e.is_active = TRUE 
 AND es.skill_name IN ('React', 'JavaScript', 'Python')
 GROUP BY e.id, e.name, d.title;
+```
+
+#### ❌ Common Mistake: Mixing EXISTS with Skill Details
+```sql
+-- BAD: Can't reference es.skill_name when es is only in EXISTS subquery
+SELECT e.name, d.title, es.skill_name  -- ❌ ERROR: es not available here
+FROM employees e 
+JOIN designations d ON e.designation_id = d.id 
+WHERE EXISTS (
+    SELECT 1 FROM employee_skills es 
+    WHERE es.employee_id = e.id 
+    AND es.skill_name IN ('React', 'JavaScript')
+);
 ```
 
 ## 🎯 Query Optimization Patterns
@@ -84,8 +101,10 @@ AND EXISTS (
 ```
 
 ### 3. Availability Queries
+
+#### ✅ Simple Availability Check (No Skill Details)
 ```sql
--- Find available employees with skills
+-- Find available employees with skills (no skill details needed)
 SELECT e.name, d.title 
 FROM employees e 
 JOIN designations d ON e.designation_id = d.id 
@@ -98,10 +117,38 @@ AND EXISTS (
 AND e.id NOT IN (
     SELECT a.employee_id 
     FROM allocations a 
-    WHERE a.status = 'active' 
+    WHERE a.status = 'ACTIVE' 
     GROUP BY a.employee_id 
     HAVING SUM(CAST(a.percent_allocated AS INTEGER)) >= 100
 );
+```
+
+#### ✅ Detailed Availability Query (With Skill Details)
+```sql
+-- Find available employees with skill details
+SELECT e.name, d.title, 
+       STRING_AGG(es.skill_name, ', ') as skills,
+       (100 - COALESCE(SUM(CAST(a.percent_allocated AS INTEGER)), 0)) AS available_percentage
+FROM employees e 
+JOIN designations d ON e.designation_id = d.id 
+JOIN employee_skills es ON e.id = es.employee_id 
+LEFT JOIN allocations a ON e.id = a.employee_id AND a.status = 'ACTIVE'
+WHERE e.is_active = TRUE 
+AND es.skill_name IN ('React', 'JavaScript')
+GROUP BY e.id, e.name, d.title
+HAVING COALESCE(SUM(CAST(a.percent_allocated AS INTEGER)), 0) < 100;
+```
+
+#### ❌ Common Availability Mistakes
+```sql
+-- BAD: Wrong HAVING logic (shows 100% allocated employees!)
+HAVING (100 - SUM(allocation)) > 0
+
+-- BAD: Wrong enum case
+WHERE a.status = 'active'  -- Should be 'ACTIVE'
+
+-- BAD: Missing CAST for integer math
+SUM(a.percent_allocated)  -- Should be SUM(CAST(a.percent_allocated AS INTEGER))
 ```
 
 ### 4. Complex Project Queries
