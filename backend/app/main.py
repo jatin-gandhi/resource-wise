@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import create_tables
 from app.routers import ai, allocations, chat, employees, health, projects
+from app.routers.ai import initialize_orchestrator, shutdown_orchestrator
 
 # Configure structured logging for readable console output
 import logging
@@ -38,12 +39,29 @@ async def lifespan(app: FastAPI):
     """Application lifespan handler"""
     logger.info("Starting Resource Wise API")
 
-    # Create database tables
-    await create_tables()
+    try:
+        # Create database tables
+        await create_tables()
+        
+        # Initialize AI orchestrator singleton
+        await initialize_orchestrator()
+        
+        logger.info("Resource Wise API startup complete ✓")
+        
+    except Exception as e:
+        logger.error(f"Failed to start Resource Wise API: {e}")
+        raise
 
     yield
 
-    logger.info("Shutting down Resource Wise API")
+    try:
+        # Shutdown AI orchestrator
+        await shutdown_orchestrator()
+        
+        logger.info("Resource Wise API shutdown complete ✓")
+        
+    except Exception as e:
+        logger.error(f"Error during Resource Wise API shutdown: {e}")
 
 
 # Create FastAPI app

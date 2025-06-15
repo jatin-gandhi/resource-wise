@@ -13,10 +13,45 @@ from app.schemas.ai import QueryRequest, QueryResponse
 router = APIRouter(prefix="/ai", tags=["ai"])
 logger = structlog.get_logger()
 
+# Global singleton orchestrator instance (managed by lifespan)
+orchestrator_instance: AIOrchestrator | None = None
+
 
 def get_orchestrator() -> AIOrchestrator:
-    """Get AI orchestrator instance."""
-    return AIOrchestrator()  # AIConfig will automatically use settings
+    """Get singleton AI orchestrator instance."""
+    if orchestrator_instance is None:
+        raise HTTPException(
+            status_code=503, 
+            detail="AI service not initialized. Please wait for startup to complete."
+        )
+    return orchestrator_instance
+
+
+async def initialize_orchestrator() -> None:
+    """Initialize the singleton AI orchestrator instance."""
+    global orchestrator_instance
+    
+    if orchestrator_instance is not None:
+        logger.warning("AIOrchestrator already initialized")
+        return
+    
+    try:
+        logger.info("Initializing AIOrchestrator singleton...")
+        orchestrator_instance = AIOrchestrator()
+        logger.info("AIOrchestrator singleton ready ✓")
+    except Exception as e:
+        logger.error(f"Failed to initialize AIOrchestrator: {e}")
+        raise
+
+
+async def shutdown_orchestrator() -> None:
+    """Shutdown the singleton AI orchestrator instance."""
+    global orchestrator_instance
+    
+    if orchestrator_instance is not None:
+        logger.info("Shutting down AIOrchestrator singleton...")
+        orchestrator_instance = None
+        logger.info("AIOrchestrator singleton shutdown complete")
 
 
 @router.get("/health")
