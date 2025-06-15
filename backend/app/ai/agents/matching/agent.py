@@ -1,7 +1,7 @@
 """Resource Matching Agent for intelligent resource allocation."""
 
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 
 import structlog
 from pydantic import BaseModel, Field, validator
@@ -23,6 +23,27 @@ logger = structlog.get_logger()
 # ============================================================================
 
 
+class ResourceRequirement(BaseModel):
+    """Resource requirement details."""
+
+    resource_type: str = Field(..., description="Type of resource (e.g., 'TL', 'SSE', 'SDE')")
+    resource_count: int = Field(..., ge=1, description="Number of resources required")
+    required_allocation_percentage: int = Field(
+        default=None,
+        ge=1,
+        le=100,
+        description="Required allocation percentage (optional - defaults to 100% if not specified)",
+    )
+
+    def get_effective_allocation_percentage(self) -> int:
+        """Get the effective allocation percentage (100% if not specified)."""
+        return (
+            self.required_allocation_percentage
+            if self.required_allocation_percentage is not None
+            else 100
+        )
+
+
 class ProjectDetails(BaseModel):
     """Project details for matching."""
 
@@ -30,9 +51,8 @@ class ProjectDetails(BaseModel):
     duration: int = Field(..., description="Project duration in months")
     starting_from: str = Field(..., description="Project start date/month")
     skills_required: List[str] = Field(..., description="Required technical skills")
-    resources_required: Dict[str, int] = Field(
-        ...,
-        description="Number and type of resources required (e.g., {'Tech Lead': 1, 'Senior Software Engineer': 2})",
+    resources_required: List[ResourceRequirement] = Field(
+        ..., description="List of resource requirements with optional allocation percentages"
     )
 
 
@@ -130,7 +150,7 @@ class MatchingAgent(BaseAgent):
 
         # Initialize LLM for resource matching
         self.llm = ChatOpenAI(
-            model="gpt-3.5-turbo",
+            model="gpt-4o",
             temperature=0.1,  # Low temperature for consistent matching
             max_tokens=3000,
             api_key=self.config.api_key,
@@ -160,29 +180,95 @@ class MatchingAgent(BaseAgent):
 **MATCHING CRITERIA (in order of importance):**
 
 1. **AVAILABILITY** - Employee must have sufficient available allocation percentage
+   - Employee's available_percentage must be >= required allocation percentage
+   - If no allocation percentage specified in requirements, assume 100% is required
+   - This is the PRIMARY filtering criterion - apply first before other criteria
 2. **DESIGNATION MATCH** - Employee designation should align with required role
 3. **SKILLS MATCH** - Employee should possess one or more required technical skills
 - All matching is case insensitive.
 
-**SCORING METHODOLOGY:**
-- Skills Match Percentage: Calculate based on how many required skills the team covers
-- Consider employee availability and designation fit
-- Prioritize combinations that maximize skill coverage
+**ALLOCATION MATCHING RULES:**
+- ALWAYS apply allocation filtering as the first step
+- When allocation percentage IS specified: employee's available_percentage >= required allocation
+- When allocation percentage IS NOT specified: employee's available_percentage >= 100% (assume full allocation needed)
+- Example: "TL: 1 (required allocation: 50%)" → only include TLs with available_percentage >= 50%
+- Example: "SE: 2" → only include SEs with available_percentage >= 100%
+
+**MATCHING PROCESS:**
+1. First, filter employees by availability (primary criterion)
+2. Then, filter by designation match
+3. Finally, consider skills match for team composition
 
 **DESIGNATION MATCHING:**
 - Exact match: Senior Software Engineer = Senior Software Engineer
 - Level match: Senior Software Engineer can work as Tech Lead but SDE cannot work as Tech Lead
 
-**SKILLS MATCHING:**
+**SKILLS MATCHING & PRIORITIZATION:**
 - Calculate percentage of required skills covered by the team
 - A team member with ANY of the required skills contributes to the match
 
+**CANDIDATE RANKING WITHIN SAME DESIGNATION:**
+When multiple candidates meet availability and designation requirements, rank them by:
+
+1. **Framework-Based Skill Priority**: MANDATORY first-level filtering
+   - Identify framework-language relationships in requirements
+   - RULE: Framework experience > Base language experience (Django > Python, React > JavaScript)
+   - RULE: Framework expertise implies base language competency automatically
+   - RULE: Cross-domain frameworks don't imply other languages (Spring Boot ≠ Python knowledge)
+   - PRIORITY ORDER: Domain-specific frameworks > Base languages > Unrelated skills
+   - When calculating skills match, weight frameworks 3x more than base languages
+
+2. **Skill Count Match**: Among candidates with similar critical skill levels
+   - 3+ matching skills > 2 matching skills > 1 matching skill > 0 matching skills
+
+3. **Skill Quality Assessment**: For candidates with same skill count, apply these rules:
+   - **Recency Thresholds**:
+     * Current/Recent (0-3 months): Excellent
+     * Moderate (4-12 months): Good  
+     * Stale (13-24 months): Fair
+     * Very Stale (25+ months): Poor
+   - **Experience Thresholds**:
+     * Expert (24+ months): Excellent
+     * Experienced (12-23 months): Good
+     * Intermediate (6-11 months): Fair
+     * Beginner (0-5 months): Poor
+   - **Balancing Rules**:
+     * Recent + Intermediate > Stale + Expert (for skills used >12 months ago)
+     * Expert + Moderate > Intermediate + Recent (for skills used 4-12 months ago)
+     * Always prefer Recent over Stale when experience difference is <12 months
+
+4. **Skill Depth vs Breadth**:
+   - For 1-2 required skills: Prioritize depth (expert in key skills)
+   - For 3+ required skills: Balance depth and breadth
+   - ALWAYS ensure critical skills are covered before considering breadth
+
+5. **Framework-Language Relationships & Transferable Skills**:
+   - **Implicit Language Skills**: Framework expertise implies base language knowledge
+     * Django/Flask expert → Python competency (automatic credit)
+     * React/Angular expert → JavaScript competency (automatic credit)
+     * Spring Boot expert → Java competency (automatic credit)
+   - **Cross-Domain Separation**: Different language ecosystems don't transfer
+     * Spring Boot (Java) + Python = separate, unrelated skills
+     * .NET (C#) + Python = separate, unrelated skills
+   - **Same-Domain Transferability**: Related frameworks get partial credit
+     * Django ↔ Flask: 80% transferable (both Python web)
+     * React ↔ Angular: 60% transferable (both JavaScript frontend)
+   - **Technology Evolution**: Modern versions preferred over legacy
+
+6. **Project Context Considerations**:
+   - Short projects (<3 months): Heavily favor recent usage and immediate skills
+   - Long projects (6+ months): Consider learning potential and adaptability
+   - Complex projects: Prioritize proven experience over recent dabbling
+
 **TEAM COMPOSITION RULES:**
-- Ensure proper availability of employees
-- Ensure skill coverage across the team 
+- Start with availability-filtered employees only
+- Ensure proper designation distribution
+- Maximize skill coverage across the team
+- Prioritize combinations that meet allocation requirements
+- When selecting from multiple qualified candidates, choose the best-ranked individuals based on skill matching criteria above
 
 **OUTPUT REQUIREMENTS:**
-- Group matched employees by their designation
+- Group matched employees by their designation (only those meeting availability requirements)
 - Provide 2-3 possible team combinations
 - Calculate accurate skills match percentages
 - List specific skills matched and missing for each combination"""
@@ -204,6 +290,40 @@ Please analyze the available employees and provide:
 1. **Matched Resources**: Group suitable employees by designation
 2. **Team Combinations**: Suggest 2-3 optimal team combinations with skills analysis
 
+**ALLOCATION FILTERING (MANDATORY):**
+- Check each resource requirement in the Resources Required section
+- ALWAYS apply allocation filtering as the primary criterion
+- When allocation requirement is specified, employee must have available_percentage >= required percentage
+- When NO allocation requirement is specified, employee must have available_percentage >= 100% (assume full allocation needed)
+
+**SKILL-BASED RANKING (IMPORTANT):**
+- For each designation, rank candidates by skill match quality
+- Apply the detailed ranking criteria from the system message
+- Consider skill count, experience depth, usage recency, and transferable skills
+- Account for project duration and complexity when making trade-offs
+- Prioritize candidates with the best overall skill profile for the specific project context
+- Include the best-ranked candidates in your team combinations
+
+**FRAMEWORK-BASED SKILL PRIORITY (MANDATORY):**
+- Analyze skill requirements for framework-language relationships
+- PRIORITY HIERARCHY: Frameworks > Base Languages > Unrelated Skills
+- FRAMEWORK EXAMPLES: Django/Flask (Python), React/Angular (JavaScript), Spring Boot (Java)
+- IMPLICIT SKILLS: Framework expertise automatically grants base language competency
+- EXAMPLE ANALYSIS for "Python, Flask, Django":
+  * Django expert (24mo) → Gets Python credit automatically → HIGHEST priority
+  * Flask expert (18mo) → Gets Python credit automatically → HIGH priority  
+  * Python expert (36mo) with no frameworks → MEDIUM priority
+  * Unrelated skills only → LOWEST priority
+- CROSS-DOMAIN RULE: Spring Boot + Python = separate skills (no automatic credit)
+
+**COMMON RANKING SCENARIOS:**
+- High experience + old usage vs Medium experience + recent usage: Favor recent for skills unused >12 months
+- Skill specialist vs Generalist: For 1-2 skills favor specialist, for 3+ skills consider generalist
+- Exact match vs Transferable skills: Exact match preferred, but give credit to related technologies
+- Framework vs Base language: Framework expertise (Django) beats base language only (Python)
+- Implicit skills: Django expert automatically gets Python competency credit
+- Cross-domain separation: Spring Boot expertise doesn't imply Python knowledge
+
 **OUTPUT FORMAT REQUIREMENTS:**
 - For matched employees, include only: name, designation, available_percentage, skills (as simple list of skill names only)
 - For team combinations, include: team_members, skills_match (percentage), skills_matched, skills_missing
@@ -220,11 +340,24 @@ Please analyze the available employees and provide:
             ]
         )
 
-    def _format_resources_required(self, resources: Dict[str, int]) -> str:
+    def _format_resources_required(self, resources: List[ResourceRequirement]) -> str:
         """Format resources required for the prompt."""
         formatted = []
-        for designation, count in resources.items():
-            formatted.append(f"- {designation}: {count}")
+        for requirement in resources:
+            resource_type = requirement.resource_type
+            count = requirement.resource_count
+            effective_allocation = requirement.get_effective_allocation_percentage()
+
+            if requirement.required_allocation_percentage is not None:
+                # Explicitly specified allocation
+                formatted.append(
+                    f"- {resource_type}: {count} (required allocation: {effective_allocation}%)"
+                )
+            else:
+                # Default allocation (100%)
+                formatted.append(
+                    f"- {resource_type}: {count} (required allocation: {effective_allocation}% - default)"
+                )
         return "\n".join(formatted)
 
     def _format_available_employees(self, employees: List[EmployeeDetail]) -> str:
