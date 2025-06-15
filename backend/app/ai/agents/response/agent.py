@@ -35,10 +35,12 @@ class ResponseAgent(BaseAgent):
         # Get prompts from prompts module
         self.response_generation_prompt = ResponsePrompts.get_response_generation_prompt()
         self.error_response_prompt = ResponsePrompts.get_error_response_prompt()
+        self.resource_matching_prompt = ResponsePrompts.get_resource_matching_response_prompt()
 
         # Initialize chains
         self.response_chain = self.response_generation_prompt | self.llm
         self.error_chain = self.error_response_prompt | self.llm
+        self.resource_matching_chain = self.resource_matching_prompt | self.llm
 
     async def process(self, input_data: dict[str, Any]) -> dict[str, Any]:
         """Process database results to generate natural language response.
@@ -48,6 +50,8 @@ class ResponseAgent(BaseAgent):
                 Expected format:
                 {
                     "db_results": [...],           # Database query results
+                    "matched_resources": {...},    # Matched resources from Resource Matching Agent (if available)
+                    "team_combinations": [...],    # Team combinations from Resource Matching Agent (if available)
                     "original_query": "...",       # User's original question
                     "query_context": {...},        # Context from Query Agent
                     "user_id": "123",
@@ -71,7 +75,14 @@ class ResponseAgent(BaseAgent):
             if not input_data.get("success", True) or input_data.get("error"):
                 return await self._handle_error_response(input_data)
 
-            # Extract data
+            # Check if this is a resource matching response
+            if (
+                input_data.get("matched_resources") is not None
+                or input_data.get("team_combinations") is not None
+            ):
+                return await self._generate_resource_matching_response(input_data)
+
+            # Extract data for regular database results
             db_results = input_data.get("db_results", [])
             original_query = input_data.get("original_query", "")
             query_context = input_data.get("query_context", {})
@@ -87,6 +98,70 @@ class ResponseAgent(BaseAgent):
             )
             return {
                 "response": "I retrieved your data successfully, but encountered an issue generating the response. Please try again.",
+                "success": False,
+                "error": str(e),
+                "agent_type": "response",
+            }
+
+    async def _generate_resource_matching_response(
+        self, input_data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Generate natural language response from resource matching results.
+
+        Args:
+            input_data: Input data containing resource matching results
+
+        Returns:
+            Response dictionary with natural language analysis
+        """
+        try:
+            # Extract data and pass directly to LLM
+            matched_resources = input_data.get("matched_resources", {})
+            team_combinations = input_data.get("team_combinations", [])
+            project_details = input_data.get("project_details", {})
+            original_query = input_data.get("original_query", "")
+
+            chain_input = {
+                "matched_resources": matched_resources,
+                "team_combinations": team_combinations,
+                "project_details": project_details,
+                "original_query": original_query,
+            }
+
+            logger.info(
+                "[RESPONSE-AGENT] Generating resource matching response",
+                matched_resources_count=len(matched_resources),
+                team_combinations_count=len(team_combinations),
+                agent_type="response",
+            )
+
+            result = await self.resource_matching_chain.ainvoke(chain_input)
+            natural_response = str(result.content)
+
+            logger.info(
+                "[RESPONSE-AGENT] Resource matching response generated",
+                response_length=len(natural_response),
+                agent_type="response",
+            )
+
+            return {
+                "response": natural_response,
+                "success": True,
+                "agent_type": "response",
+                "metadata": {
+                    "matched_designations": len(matched_resources),
+                    "team_combinations": len(team_combinations),
+                    "response_type": "resource_matching",
+                },
+            }
+        except Exception as e:
+            logger.error(
+                "[RESPONSE-AGENT] Error generating resource matching response",
+                error=str(e),
+                agent_type="response",
+            )
+            return {
+                "response": "I encountered an issue while analyzing the resource matching results. Please try again.",
                 "success": False,
                 "error": str(e),
                 "agent_type": "response",
