@@ -130,7 +130,33 @@ Analysis: "Dev Partner" = precise employee_group, "consultants" = precise employ
 Classification: PRECISE
 
 RESPONSE FORMAT:
-Return only one word: "FUZZY" or "PRECISE"
+Return ONLY a valid JSON object in this exact format:
+{{
+  "classification": "FUZZY" or "PRECISE",
+  "fuzzy_terms": ["term1", "term2", "term3"] or []
+}}
+
+Do not include any other text, explanations, or markdown formatting.
+
+EXAMPLES:
+
+Query: "Find SSE with React skills"
+{{"classification": "FUZZY", "fuzzy_terms": ["SSE"]}}
+
+Query: "Show me John Doe's current allocation"
+{{"classification": "PRECISE", "fuzzy_terms": []}}
+
+Query: "find available employees with skills: frontend, backend in roles: TL, SSE"
+{{"classification": "FUZZY", "fuzzy_terms": ["frontend", "backend", "TL", "SSE"]}}
+
+Query: "List experienced frontend developers"
+{{"classification": "FUZZY", "fuzzy_terms": ["experienced", "frontend", "developers"]}}
+
+Query: "Find employees in design team"
+{{"classification": "FUZZY", "fuzzy_terms": ["design team"]}}
+
+Query: "Show KD India contractors in Bangalore"
+{{"classification": "PRECISE", "fuzzy_terms": []}}
 
 Query to classify: {query}
 

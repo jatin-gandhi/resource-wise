@@ -445,19 +445,19 @@ Example 2 - Skill Query (Skill-focused):
 User Query: "Find developers with React experience"
 Resolved Terms: {{"developers": ["React", "JavaScript", "Senior Software Engineer", "Software Engineer"]}}
 Analysis: SKILL query → Extract ONLY skills: ["React", "JavaScript"]
-SQL: SELECT DISTINCT e.name, d.title FROM employees e JOIN designations d ON e.designation_id = d.id JOIN employee_skills es ON e.id = es.employee_id WHERE es.skill_name IN ('React', 'JavaScript');
+SQL: SELECT e.name, d.title FROM employees e JOIN designations d ON e.designation_id = d.id WHERE e.is_active = TRUE AND EXISTS (SELECT 1 FROM employee_skills es WHERE es.employee_id = e.id AND es.skill_name IN ('React', 'JavaScript'));
 
 Example 3 - Mixed Query (Both roles and skills):
 User Query: "Find senior frontend developers"
 Resolved Terms: {{"senior": ["Senior Software Engineer"], "frontend": ["React", "Vue", "Angular"]}}
 Analysis: MIXED query → Use roles: ["Senior Software Engineer"] AND skills: ["React", "Vue", "Angular"]
-SQL: SELECT DISTINCT e.name, d.title FROM employees e JOIN designations d ON e.designation_id = d.id JOIN employee_skills es ON e.id = es.employee_id WHERE d.title = 'Senior Software Engineer' AND es.skill_name IN ('React', 'Vue', 'Angular');
+SQL: SELECT e.name, d.title FROM employees e JOIN designations d ON e.designation_id = d.id WHERE d.title = 'Senior Software Engineer' AND e.is_active = TRUE AND EXISTS (SELECT 1 FROM employee_skills es WHERE es.employee_id = e.id AND es.skill_name IN ('React', 'Vue', 'Angular'));
 
 Example 4 - Current Availability Query:
 User Query: "Give me SSE who is available with backend skills"
 Resolved Terms: {{"SSE": ["Senior Software Engineer"], "backend": ["Java", "Python", "Node.js"]}}
 Analysis: MIXED query with CURRENT AVAILABILITY → Use roles + skills + current availability check
-SQL: SELECT DISTINCT e.name, d.title FROM employees e JOIN designations d ON e.designation_id = d.id JOIN employee_skills es ON e.id = es.employee_id WHERE d.title = 'Senior Software Engineer' AND es.skill_name IN ('Java', 'Python', 'Node.js') AND e.is_active = TRUE AND e.id NOT IN (SELECT a.employee_id FROM allocations a WHERE a.status = 'active' GROUP BY a.employee_id HAVING SUM(CAST(a.percent_allocated AS INTEGER)) >= 100);
+SQL: SELECT e.name, d.title FROM employees e JOIN designations d ON e.designation_id = d.id WHERE d.title = 'Senior Software Engineer' AND e.is_active = TRUE AND EXISTS (SELECT 1 FROM employee_skills es WHERE es.employee_id = e.id AND es.skill_name IN ('Java', 'Python', 'Node.js')) AND e.id NOT IN (SELECT a.employee_id FROM allocations a WHERE a.status = 'active' GROUP BY a.employee_id HAVING SUM(CAST(a.percent_allocated AS INTEGER)) >= 100);
 
 Example 5 - Future 100% Availability Query:
 User Query: "Is Tyler available 100% for next month?"
@@ -528,7 +528,7 @@ ORDER BY ms.year, ms.month;
 Example 8 - Complex Project Query:
 User Query: "Find experienced backend engineers working on customer projects"
 Resolved Terms: {{"experienced": ["Senior Software Engineer", "Technical Lead"], "backend": ["Java", "Python", "Node.js"]}}
-SQL: SELECT DISTINCT e.name, d.title, p.name FROM employees e JOIN designations d ON e.designation_id = d.id JOIN employee_skills es ON e.id = es.employee_id JOIN allocations a ON e.id = a.employee_id JOIN projects p ON a.project_id = p.id WHERE d.title IN ('Senior Software Engineer', 'Technical Lead') AND es.skill_name IN ('Java', 'Python', 'Node.js') AND p.project_type = 'customer' AND a.status = 'active';
+SQL: SELECT e.name, d.title, p.name FROM employees e JOIN designations d ON e.designation_id = d.id JOIN allocations a ON e.id = a.employee_id JOIN projects p ON a.project_id = p.id WHERE d.title IN ('Senior Software Engineer', 'Technical Lead') AND p.project_type = 'customer' AND a.status = 'active' AND e.is_active = TRUE AND EXISTS (SELECT 1 FROM employee_skills es WHERE es.employee_id = e.id AND es.skill_name IN ('Java', 'Python', 'Node.js')) GROUP BY e.id, e.name, d.title, p.id, p.name;
 
 Example 9 - Organization Query (PRECISE):
 User Query: "Show me KD India contractors in Bangalore"
@@ -650,11 +650,14 @@ COMMON ISSUES TO FIX:
 - Inefficient query patterns
 - Incorrect use of resolved fuzzy terms
 - Missing IN clauses for multiple resolved values
-- Missing DISTINCT when joining with employee_skills (causes duplicate employees)
+- JOIN MULTIPLICATION ISSUE: Avoid "JOIN employee_skills" which causes duplicate employees (one row per skill)
+- SOLUTION: Use EXISTS subqueries instead: "EXISTS (SELECT 1 FROM employee_skills es WHERE es.employee_id = e.id AND es.skill_name IN (...))"
+- If JOIN with employee_skills is necessary, always add proper GROUP BY to eliminate duplicates
 - Incorrect availability logic (should be simple allocation < 100% check)
 - Using skills as job titles in d.title conditions
 - CRITICAL: Aggregate functions (SUM, COUNT, etc.) in WHERE clause - must use HAVING with GROUP BY instead
 - Future availability queries with incorrect date logic
+- Missing e.is_active = TRUE filter for active employees
 
 RESPONSE FORMAT:
 Return ONLY the corrected SQL query without any explanation, analysis, or markdown formatting.
