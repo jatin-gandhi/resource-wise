@@ -48,7 +48,7 @@ export const theme = createTheme({
     },
   },
   typography: {
-    fontFamily: "'Lato', sans-serif",
+    fontFamily: "'Inter', sans-serif",
     fontSize: 14,
     h1: {
       fontSize: '2.5rem',
