@@ -54,10 +54,12 @@ class AgentWorkflow:
         def route_after_intent(state: AgentStateDict) -> str:
             """Route based on intent classification result."""
             workflow_intent = state.get("workflow_intent")
-            
+
             if workflow_intent == "resource_matching":
                 return "project_info_extraction"
-            elif state.get("query_result") and state["query_result"].get("requires_database", False):
+            elif state.get("query_result") and state["query_result"].get(
+                "requires_database", False
+            ):
                 return "query_generation"
             else:
                 return END
@@ -65,7 +67,7 @@ class AgentWorkflow:
         def route_after_project_info(state: AgentStateDict) -> str:
             """Route after project info extraction."""
             missing_info = state.get("missing_project_info", [])
-            
+
             if missing_info:
                 return "response_generation"  # Ask for missing info
             else:
@@ -75,7 +77,7 @@ class AgentWorkflow:
             """Route after response generation."""
             workflow_intent = state.get("workflow_intent")
             current_stage = state.get("current_stage")
-            
+
             if workflow_intent == "resource_matching" and current_stage == "employees_retrieved":
                 return "resource_matching"
             else:
@@ -87,27 +89,21 @@ class AgentWorkflow:
             route_after_intent,
             {
                 "project_info_extraction": "project_info_extraction",
-                "query_generation": "query_generation", 
-                END: END
+                "query_generation": "query_generation",
+                END: END,
             },
         )
 
         workflow.add_conditional_edges(
             "project_info_extraction",
             route_after_project_info,
-            {
-                "response_generation": "response_generation",
-                "query_generation": "query_generation"
-            },
+            {"response_generation": "response_generation", "query_generation": "query_generation"},
         )
 
         workflow.add_conditional_edges(
             "response_generation",
             route_after_response,
-            {
-                "resource_matching": "resource_matching",
-                END: END
-            },
+            {"resource_matching": "resource_matching", END: END},
         )
 
         # Regular edges
@@ -150,7 +146,7 @@ class AgentWorkflow:
             # Update state with results
             state["current_stage"] = "intent_classified"
             state["query_result"] = result
-            
+
             # Set workflow_intent based on result
             if "workflow_intent" in result:
                 state["workflow_intent"] = result["workflow_intent"]
@@ -207,7 +203,9 @@ class AgentWorkflow:
             )
 
             # Extract project details using Intent Agent's enhanced capabilities
-            project_details, missing_info = await self.intent_agent.extract_project_details(state["user_input"])
+            project_details, missing_info = await self.intent_agent.extract_project_details(
+                state["user_input"]
+            )
 
             # Update state
             state["project_details"] = project_details
@@ -237,7 +235,13 @@ class AgentWorkflow:
             # Set error state - will trigger info request
             state["current_stage"] = "project_info_error"
             state["error"] = str(e)
-            state["missing_project_info"] = ["name", "duration_months", "start_date", "skills_required", "resources_required"]
+            state["missing_project_info"] = [
+                "name",
+                "duration_months",
+                "start_date",
+                "skills_required",
+                "resources_required",
+            ]
             state["project_details"] = {}
 
             return state
@@ -266,27 +270,31 @@ class AgentWorkflow:
             logger.info(f"query_to_use: {query_to_use}")
 
             workflow_intent = state.get("workflow_intent")
-            
+
             if workflow_intent == "resource_matching":
                 # Generate employee availability query
                 project_details = state.get("project_details", {})
-                
+
                 # Create a natural language query for employee search
                 skills = project_details.get("skills_required", [])
                 resources = project_details.get("resources_required", [])
-                
+
                 employee_query = f"Find available employees"
                 if skills:
                     employee_query += f" with skills: {', '.join(skills)}"
                 if resources:
                     # Extract roles from new format (list of ResourceRequirement objects)
                     if isinstance(resources, list):
-                        roles = [resource.get("resource_type", "") for resource in resources if isinstance(resource, dict)]
+                        roles = [
+                            resource.get("resource_type", "")
+                            for resource in resources
+                            if isinstance(resource, dict)
+                        ]
                         roles = [role for role in roles if role]  # Filter out empty strings
                     else:
                         # Backward compatibility with old format (dict)
                         roles = list(resources.keys())
-                    
+
                     if roles:
                         employee_query += f" in roles: {', '.join(roles)}."
                 employee_query += "Provide employee id as employee_id, name as employee_name, email as employee_email, designation title as employee_designation, skills as employee_skills, and available allocation percentage as employee_available_percentage. For each skill include skill name as skill_name, experience in months as skill_experience, and last used date as skill_last_used_date."
@@ -297,8 +305,8 @@ class AgentWorkflow:
                     "user_id": state["context"].get("user_id"),
                     "metadata": {
                         "workflow_intent": "resource_matching",
-                        "project_details": project_details
-                    }
+                        "project_details": project_details,
+                    },
                 }
             else:
                 # Regular database query
@@ -366,7 +374,7 @@ class AgentWorkflow:
 
             # Store database results
             state["database_result"] = db_result
-            
+
             # Handle resource matching workflow
             workflow_intent = state.get("workflow_intent")
             if workflow_intent == "resource_matching":
@@ -374,7 +382,7 @@ class AgentWorkflow:
                 raw_employees = db_result.get("db_results", [])
                 state["available_employees"] = raw_employees
                 state["current_stage"] = "employees_retrieved"
-                
+
                 logger.info(
                     "Employee data retrieved for matching",
                     employee_count=len(raw_employees),
@@ -436,86 +444,88 @@ class AgentWorkflow:
             workflow_intent = state.get("workflow_intent")
             missing_info = state.get("missing_project_info", [])
             current_stage = state.get("current_stage")
-            
+
             # Handle missing project information request
             if workflow_intent == "resource_matching" and missing_info:
                 project_details = state.get("project_details", {})
-                response = self.intent_agent.generate_project_info_request(missing_info, project_details)
-                
+                response = self.intent_agent.generate_project_info_request(
+                    missing_info, project_details
+                )
+
                 final_result = {
                     "intent": "project_info_request",
                     "response": response,
                     "requires_database": False,
                     "workflow_intent": workflow_intent,
                     "missing_project_info": missing_info,
-                    "success": True
+                    "success": True,
                 }
-                
+
                 state["query_result"] = final_result
                 state["current_stage"] = "awaiting_project_info"
-                
+
                 logger.info(
                     "Generated project info request",
                     missing_fields=missing_info,
                     session_id=state["session_id"],
                 )
-                
+
                 return state
-            
+
             # Handle employee availability response (before matching)
             elif workflow_intent == "resource_matching" and current_stage == "employees_retrieved":
                 employees = state.get("available_employees", [])
                 db_result = state.get("database_result", {})
-                
+
                 if employees:
                     response = f"I found {len(employees)} available employees that match your project requirements. Let me analyze the best team combinations for you."
                 else:
                     response = "I couldn't find any employees that match your project requirements. You may want to adjust the skills or roles needed."
-                
+
                 final_result = {
                     "intent": "resource_matching",
                     "response": response,
                     "employee_count": len(employees),
                     "workflow_intent": workflow_intent,
                     "success": len(employees) > 0,
-                    "execution_time": db_result.get("execution_time", 0)
+                    "execution_time": db_result.get("execution_time", 0),
                 }
-                
+
                 state["query_result"] = final_result
                 # Keep current_stage as "employees_retrieved" for routing to matching
-                
+
                 logger.info(
                     "Generated employee availability response",
                     employee_count=len(employees),
                     session_id=state["session_id"],
                 )
-                
+
                 return state
-            
+
             # Handle resource matching results (after matching)
             elif workflow_intent == "resource_matching" and current_stage == "matching_completed":
                 matching_results = state.get("query_result", {})
-                
+
                 final_result = {
                     "intent": "resource_matching",
                     "response": matching_results.get("response", "Resource matching completed."),
                     "workflow_intent": workflow_intent,
                     "success": matching_results.get("success", True),
                     "matching_results": matching_results,
-                    "team_combinations": state.get("team_combinations", [])
+                    "team_combinations": state.get("team_combinations", []),
                 }
-                
+
                 state["query_result"] = final_result
                 state["current_stage"] = "completed"
-                
+
                 logger.info(
                     "Generated resource matching response",
                     has_team_combinations=len(state.get("team_combinations", [])) > 0,
                     session_id=state["session_id"],
                 )
-                
+
                 return state
-            
+
             # Regular database response handling
             else:
                 # Prepare input for Response Agent
@@ -618,30 +628,34 @@ class AgentWorkflow:
 
             if not project_details:
                 raise ValueError("No project details available for matching")
-            
+
             if not raw_employees:
                 raise ValueError("No available employees found for matching")
 
             # Transform project details to match MatchingAgent schema
-            transformed_project_details = self._transform_project_details_for_matching(project_details)
-            
+            transformed_project_details = self._transform_project_details_for_matching(
+                project_details
+            )
+
             logger.info(
                 "Data transformation completed",
                 raw_employee_count=len(raw_employees),
                 session_id=state["session_id"],
             )
-            
+
             # Prepare input for MatchingAgent
             matching_input = {
                 "project_details": transformed_project_details,
-                "available_employees": raw_employees
+                "available_employees": raw_employees,
             }
 
             # Run matching algorithm
             matching_result = await self.matching_agent.process(matching_input)
 
             # Extract team combinations from result
-            team_combinations = matching_result.get("matching_results", {}).get("possible_team_combinations", [])
+            team_combinations = matching_result.get("matching_results", {}).get(
+                "possible_team_combinations", []
+            )
 
             # Store results in state
             state["team_combinations"] = team_combinations
@@ -660,9 +674,9 @@ class AgentWorkflow:
                 "team_combinations": team_combinations,
                 "team_combinations_count": len(team_combinations),
                 "matching_completed": True,
-                "success": len(team_combinations) > 0
+                "success": len(team_combinations) > 0,
             }
-            
+
             state["query_result"] = final_result
 
             logger.info(
@@ -687,21 +701,21 @@ class AgentWorkflow:
                 **state.get("query_result", {}),
                 "response": "I found available employees but encountered an error generating team combinations. Please try again.",
                 "error": str(e),
-                "success": False
+                "success": False,
             }
-            
+
             state["query_result"] = final_result
             state["current_stage"] = "matching_error"
             state["error"] = str(e)
-            
+
             return state
 
     def _transform_project_details_for_matching(self, project_details: dict) -> dict:
         """Transform project details from our format to MatchingAgent schema.
-        
+
         Args:
             project_details: Project details in our internal format
-            
+
         Returns:
             Project details in MatchingAgent format
         """
@@ -709,22 +723,30 @@ class AgentWorkflow:
         transformed = {
             "name": project_details.get("name", "Unnamed Project"),
             "duration": project_details.get("duration_months", 1),  # duration_months -> duration
-            "starting_from": project_details.get("start_date", "TBD"),  # start_date -> starting_from
+            "starting_from": project_details.get(
+                "start_date", "TBD"
+            ),  # start_date -> starting_from
             "skills_required": project_details.get("skills_required", []),
-            "resources_required": []  # Will be transformed below
+            "resources_required": [],  # Will be transformed below
         }
-        
+
         # Transform resources_required from our format to ResourceRequirement objects
         resources_required = project_details.get("resources_required", [])
-        
+
         if isinstance(resources_required, list):
             # Already in new format - validate and ensure proper structure
             for resource in resources_required:
-                if isinstance(resource, dict) and "resource_type" in resource and "resource_count" in resource:
+                if (
+                    isinstance(resource, dict)
+                    and "resource_type" in resource
+                    and "resource_count" in resource
+                ):
                     transformed_resource = {
                         "resource_type": resource["resource_type"],
                         "resource_count": resource["resource_count"],
-                        "required_allocation_percentage": resource.get("required_allocation_percentage")
+                        "required_allocation_percentage": resource.get(
+                            "required_allocation_percentage"
+                        ),
                     }
                     transformed["resources_required"].append(transformed_resource)
         elif isinstance(resources_required, dict):
@@ -733,50 +755,50 @@ class AgentWorkflow:
                 transformed_resource = {
                     "resource_type": role,
                     "resource_count": count,
-                    "required_allocation_percentage": None  # Default to None (100%)
+                    "required_allocation_percentage": None,  # Default to None (100%)
                 }
                 transformed["resources_required"].append(transformed_resource)
-        
+
         return transformed
 
     # def _format_team_combinations_response(self, team_combinations: list[dict]) -> str:
     #     """Format team combinations into a readable response.
-        
+
     #     Args:
     #         team_combinations: List of team combination dictionaries
-            
+
     #     Returns:
     #         Formatted response string
     #     """
     #     if not team_combinations:
     #         return "No suitable team combinations found."
-        
+
     #     response = f"I found {len(team_combinations)} possible team combination{'s' if len(team_combinations) != 1 else ''}:\n\n"
-        
+
     #     for i, combination in enumerate(team_combinations[:3], 1):  # Show top 3
     #         team_members = combination.get("team_members", [])
     #         skills_match = combination.get("skills_match", 0)
     #         skills_matched = combination.get("skills_matched", [])
     #         skills_missing = combination.get("skills_missing", [])
-            
+
     #         response += f"**Team Option {i}** (Skills Match: {skills_match:.1f}%)\n"
-            
+
     #         for member in team_members:
     #             name = member.get("name", "Unknown")
     #             designation = member.get("designation", "Unknown")
     #             availability = member.get("available_percentage", 0)
     #             response += f"• {name} - {designation} ({availability}% available)\n"
-            
+
     #         if skills_matched:
     #             response += f"✅ Covers: {', '.join(skills_matched)}\n"
     #         if skills_missing:
     #             response += f"❌ Missing: {', '.join(skills_missing)}\n"
-            
+
     #         response += "\n"
-        
+
     #     if len(team_combinations) > 3:
     #         response += f"... and {len(team_combinations) - 3} more combinations available.\n"
-        
+
     #     return response
 
     async def process(

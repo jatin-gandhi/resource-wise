@@ -61,8 +61,12 @@ class EmployeeSkill(BaseModel):
     """Employee skill detail."""
 
     skill_name: str = Field(..., description="Skill name", alias="skill_name")
-    experience_months: int = Field(..., description="Experience in months", alias="skill_experience")
-    last_used: str = Field(..., description="When last used (e.g., '2024-01', 'Current')", alias="skill_last_used_date")
+    experience_months: int = Field(
+        ..., description="Experience in months", alias="skill_experience"
+    )
+    last_used: str = Field(
+        ..., description="When last used (e.g., '2024-01', 'Current')", alias="skill_last_used_date"
+    )
 
 
 class EmployeeDetail(BaseModel):
@@ -73,9 +77,16 @@ class EmployeeDetail(BaseModel):
     email: str = Field(..., description="Employee email", alias="employee_email")
     designation: str = Field(..., description="Current designation", alias="employee_designation")
     available_percentage: int = Field(
-        ..., ge=0, le=100, description="Available capacity percentage", alias="employee_available_percentage"
+        ...,
+        ge=0,
+        le=100,
+        description="Available capacity percentage",
+        alias="employee_available_percentage",
     )
-    skills: List[EmployeeSkill] = Field(default_factory=list, description="Employee skills list", alias="employee_skills")
+    skills: List[EmployeeSkill] = Field(
+        default_factory=list, description="Employee skills list", alias="employee_skills"
+    )
+
     @validator("employee_id", pre=True)
     def uuid_to_str(cls, v):
         if isinstance(v, UUID):

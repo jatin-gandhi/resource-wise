@@ -157,9 +157,9 @@ EXAMPLES:
 - User asks: "List active projects" → Next: "Show their team sizes"
   → Contextualized: "Show team sizes for active projects"
 
-Return ONLY the contextualized query, nothing else:""")
-        
-        
+Return ONLY the contextualized query, nothing else:""",
+        )
+
         # Project detail extraction prompt
         self.project_extraction_prompt = PromptTemplate(
             input_variables=["user_input"],
@@ -225,8 +225,8 @@ Extract what you can, use null for missing information. Return only valid JSON:"
                 agent_type="intent",
             )
             contextualized_query = await self._contextualize_query(
-                    request.query, context.get("chat_history", [])
-                )
+                request.query, context.get("chat_history", [])
+            )
 
             # Determine workflow type based on intent
             if intent_type == IntentType.DATABASE_QUERY:
@@ -275,7 +275,9 @@ Extract what you can, use null for missing information. Return only valid JSON:"
                 }
             else:
                 # For non-database queries, generate response directly
-                response = await self._generate_general_response(request, intent_type, context_str, context.get("chat_history", []))
+                response = await self._generate_general_response(
+                    request, intent_type, context_str, context.get("chat_history", [])
+                )
                 return {
                     "intent": intent_type,
                     "response": response,
@@ -554,26 +556,26 @@ Extract what you can, use null for missing information. Return only valid JSON:"
 
     async def extract_project_details(self, user_input: str) -> tuple[dict[str, Any], list[str]]:
         """Extract project details from user input.
-        
+
         Args:
             user_input: User's input containing project information
-            
+
         Returns:
             Tuple of (project_details_dict, missing_required_fields_list)
         """
         try:
             # Extract project details using LLM
             result = await self.extraction_chain.ainvoke({"user_input": user_input})
-            
+
             # Get the raw response content
             raw_content = str(result.content).strip()
-            
+
             logger.info(
                 "[INTENT-AGENT] Raw extraction response",
                 raw_content=raw_content,
                 agent_type="intent",
             )
-            
+
             # Handle empty response
             if not raw_content:
                 logger.warning(
@@ -582,20 +584,20 @@ Extract what you can, use null for missing information. Return only valid JSON:"
                     agent_type="intent",
                 )
                 raise ValueError("Empty response from LLM")
-            
+
             # Parse JSON response
             import json
             import re
-            
+
             # Try to extract JSON from the response (in case there's extra text)
-            json_match = re.search(r'\{.*\}', raw_content, re.DOTALL)
+            json_match = re.search(r"\{.*\}", raw_content, re.DOTALL)
             if json_match:
                 json_str = json_match.group(0)
                 project_details = json.loads(json_str)
             else:
                 # Fallback: try parsing the entire response as JSON
                 project_details = json.loads(raw_content)
-            
+
             # Validate and determine missing fields
             missing_fields = []
             required_fields = {
@@ -603,32 +605,32 @@ Extract what you can, use null for missing information. Return only valid JSON:"
                 "duration_months": "project duration",
                 "start_date": "project start date",
                 "skills_required": "required technical skills",
-                "resources_required": "team composition (roles and counts)"
+                "resources_required": "team composition (roles and counts)",
             }
-            
+
             for field, description in required_fields.items():
                 value = project_details.get(field)
                 if value is None or (isinstance(value, (list, dict)) and len(value) == 0):
                     missing_fields.append(field)
-            
+
             logger.info(
                 "[INTENT-AGENT] Project details extracted",
                 project_details=project_details,
                 missing_fields=missing_fields,
                 agent_type="intent",
             )
-            
+
             return project_details, missing_fields
-            
+
         except json.JSONDecodeError as e:
             logger.error(
                 "[INTENT-AGENT] JSON parsing error in project extraction",
                 error=str(e),
-                raw_content=raw_content if 'raw_content' in locals() else "N/A",
+                raw_content=raw_content if "raw_content" in locals() else "N/A",
                 user_input=user_input,
                 agent_type="intent",
             )
-            
+
             # Try to create a basic fallback extraction
             fallback_details = self._create_fallback_project_details(user_input)
             if fallback_details:
@@ -637,21 +639,33 @@ Extract what you can, use null for missing information. Return only valid JSON:"
                     fallback_details=fallback_details,
                     agent_type="intent",
                 )
-                
+
                 # Determine missing fields
                 missing_fields = []
-                required_fields = ["name", "duration_months", "start_date", "skills_required", "resources_required"]
-                
+                required_fields = [
+                    "name",
+                    "duration_months",
+                    "start_date",
+                    "skills_required",
+                    "resources_required",
+                ]
+
                 for field in required_fields:
                     value = fallback_details.get(field)
                     if value is None or (isinstance(value, (list, dict)) and len(value) == 0):
                         missing_fields.append(field)
-                
+
                 return fallback_details, missing_fields
-            
+
             # Return empty details with all fields missing
-            return {}, ["name", "duration_months", "start_date", "skills_required", "resources_required"]
-            
+            return {}, [
+                "name",
+                "duration_months",
+                "start_date",
+                "skills_required",
+                "resources_required",
+            ]
+
         except Exception as e:
             logger.error(
                 "[INTENT-AGENT] Error extracting project details",
@@ -660,105 +674,144 @@ Extract what you can, use null for missing information. Return only valid JSON:"
                 user_input=user_input,
                 agent_type="intent",
             )
-            
+
             # Return empty details with all fields missing
-            return {}, ["name", "duration_months", "start_date", "skills_required", "resources_required"]
+            return {}, [
+                "name",
+                "duration_months",
+                "start_date",
+                "skills_required",
+                "resources_required",
+            ]
 
     def _create_fallback_project_details(self, user_input: str) -> dict[str, Any]:
         """Create basic project details using simple text parsing as fallback.
-        
+
         Args:
             user_input: User's input containing project information
-            
+
         Returns:
             Basic project details dictionary
         """
         import re
-        
+
         details = {
             "name": None,
             "duration_months": None,
             "start_date": None,
             "skills_required": [],
-            "resources_required": []
+            "resources_required": [],
         }
-        
+
         user_lower = user_input.lower()
-        
+
         # Extract project name (look for "project" keyword)
-        project_match = re.search(r'project\s+(\w+)', user_lower)
+        project_match = re.search(r"project\s+(\w+)", user_lower)
         if project_match:
             details["name"] = f"{project_match.group(1).title()} project"
-        
+
         # Extract duration (look for numbers followed by month/months)
-        duration_match = re.search(r'(\d+)\s*months?', user_lower)
+        duration_match = re.search(r"(\d+)\s*months?", user_lower)
         if duration_match:
             details["duration_months"] = int(duration_match.group(1))
         elif "couple" in user_lower and "month" in user_lower:
             details["duration_months"] = 2
-        
+
         # Extract start date
         if "next month" in user_lower:
             details["start_date"] = "next month"
         elif "starting" in user_lower:
             # Look for month names after "starting"
-            months = ["january", "february", "march", "april", "may", "june", 
-                     "july", "august", "september", "october", "november", "december"]
+            months = [
+                "january",
+                "february",
+                "march",
+                "april",
+                "may",
+                "june",
+                "july",
+                "august",
+                "september",
+                "october",
+                "november",
+                "december",
+            ]
             for month in months:
                 if month in user_lower:
                     details["start_date"] = month.title()
                     break
-        
+
         # Extract skills (common technical skills)
         skills = []
-        skill_keywords = ["frontend", "backend", "react", "angular", "vue", "python", "java", 
-                         "javascript", "typescript", "node", "django", "flask", "spring"]
+        skill_keywords = [
+            "frontend",
+            "backend",
+            "react",
+            "angular",
+            "vue",
+            "python",
+            "java",
+            "javascript",
+            "typescript",
+            "node",
+            "django",
+            "flask",
+            "spring",
+        ]
         for skill in skill_keywords:
             if skill in user_lower:
                 skills.append(skill)
         details["skills_required"] = skills
-        
+
         # Extract resources (look for role abbreviations and counts)
         resources = []
-        
+
         # Look for TL (Tech Lead)
-        tl_match = re.search(r'(\d+)\s*tl\s*\((\d+)%\)', user_lower)
+        tl_match = re.search(r"(\d+)\s*tl\s*\((\d+)%\)", user_lower)
         if tl_match:
-            resources.append({
-                "resource_type": "TL",
-                "resource_count": int(tl_match.group(1)),
-                "required_allocation_percentage": int(tl_match.group(2))
-            })
-        
+            resources.append(
+                {
+                    "resource_type": "TL",
+                    "resource_count": int(tl_match.group(1)),
+                    "required_allocation_percentage": int(tl_match.group(2)),
+                }
+            )
+
         # Look for SSE (Senior Software Engineer)
-        sse_match = re.search(r'(\d+)\s*sse\s*\((\d+)%\)', user_lower)
+        sse_match = re.search(r"(\d+)\s*sse\s*\((\d+)%\)", user_lower)
         if sse_match:
-            resources.append({
-                "resource_type": "SSE", 
-                "resource_count": int(sse_match.group(1)),
-                "required_allocation_percentage": int(sse_match.group(2))
-            })
-        
+            resources.append(
+                {
+                    "resource_type": "SSE",
+                    "resource_count": int(sse_match.group(1)),
+                    "required_allocation_percentage": int(sse_match.group(2)),
+                }
+            )
+
         # Look for generic developer mentions
-        dev_match = re.search(r'(\d+)\s*developers?', user_lower)
+        dev_match = re.search(r"(\d+)\s*developers?", user_lower)
         if dev_match and not resources:  # Only if no specific roles found
-            resources.append({
-                "resource_type": "Developer",
-                "resource_count": int(dev_match.group(1)),
-                "required_allocation_percentage": None
-            })
-        
+            resources.append(
+                {
+                    "resource_type": "Developer",
+                    "resource_count": int(dev_match.group(1)),
+                    "required_allocation_percentage": None,
+                }
+            )
+
         details["resources_required"] = resources
-        
+
         return details
 
-    def generate_project_info_request(self, missing_fields: list[str], current_details: dict[str, Any]) -> str:
+    def generate_project_info_request(
+        self, missing_fields: list[str], current_details: dict[str, Any]
+    ) -> str:
         """Generate a request for missing project information.
-        
+
         Args:
             missing_fields: List of missing required fields
             current_details: Currently available project details
-            
+
         Returns:
             Formatted request message for missing information
         """
@@ -767,16 +820,16 @@ Extract what you can, use null for missing information. Return only valid JSON:"
             "duration_months": "How long is the project (in months)?",
             "start_date": "When would you like to start the project?",
             "skills_required": "What technical skills are required for this project?",
-            "resources_required": "What roles do you need and how many? (e.g., 1 Tech Lead, 2 Senior Developers)"
+            "resources_required": "What roles do you need and how many? (e.g., 1 Tech Lead, 2 Senior Developers)",
         }
-        
+
         questions = []
         for field in missing_fields:
             if field in field_questions:
                 questions.append(f"• {field_questions[field]}")
-        
+
         if not questions:
             return "I have all the information I need. Let me find available team members for your project."
-        
+
         intro = "I can help you find the perfect team! I need a few more details:"
         return f"{intro}\n\n" + "\n".join(questions)
