@@ -26,6 +26,13 @@ class AgentStateDict(TypedDict):
     context: dict[str, Any]
     history: list[dict[str, Any]]
 
+    # Resource matching workflow fields
+    workflow_intent: str | None
+    project_details: dict[str, Any] | None
+    missing_project_info: list[str]
+    available_employees: list[dict[str, Any]]
+    team_combinations: list[dict[str, Any]]
+
 
 class AgentState(BaseModel):
     """Pydantic model for agent workflow state."""
@@ -45,6 +52,13 @@ class AgentState(BaseModel):
     context: dict[str, Any] = {}
     history: list[dict[str, Any]] = []
 
+    # Resource matching workflow fields
+    workflow_intent: str | None = None
+    project_details: dict[str, Any] | None = None
+    missing_project_info: list[str] = []
+    available_employees: list[dict[str, Any]] = []
+    team_combinations: list[dict[str, Any]] = []
+
     class Config:
         """Pydantic model configuration."""
 
@@ -60,6 +74,11 @@ class AgentState(BaseModel):
             query_result=self.query_result,
             context=self.context,
             history=self.history,
+            workflow_intent=self.workflow_intent,
+            project_details=self.project_details,
+            missing_project_info=self.missing_project_info,
+            available_employees=self.available_employees,
+            team_combinations=self.team_combinations,
         )
 
     @classmethod
@@ -73,4 +92,9 @@ class AgentState(BaseModel):
             query_result=data.get("query_result"),
             context=data.get("context", {}),
             history=data.get("history", []),
+            workflow_intent=data.get("workflow_intent"),
+            project_details=data.get("project_details"),
+            missing_project_info=data.get("missing_project_info", []),
+            available_employees=data.get("available_employees", []),
+            team_combinations=data.get("team_combinations", []),
         )

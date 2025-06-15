@@ -2,6 +2,7 @@
 
 import time
 from typing import Any, Dict, List, Union
+from uuid import UUID
 
 import structlog
 from pydantic import BaseModel, Field, validator
@@ -59,22 +60,38 @@ class ProjectDetails(BaseModel):
 class EmployeeSkill(BaseModel):
     """Employee skill detail."""
 
-    skill_name: str = Field(..., description="Skill name")
-    experience_months: int = Field(..., description="Experience in months")
-    last_used: str = Field(..., description="When last used (e.g., '2024-01', 'Current')")
+    skill_name: str = Field(..., description="Skill name", alias="skill_name")
+    experience_months: int = Field(
+        ..., description="Experience in months", alias="skill_experience"
+    )
+    last_used: str = Field(
+        ..., description="When last used (e.g., '2024-01', 'Current')", alias="skill_last_used_date"
+    )
 
 
 class EmployeeDetail(BaseModel):
     """Employee detail information."""
 
-    employee_id: str = Field(..., description="Employee ID")
-    name: str = Field(..., description="Employee name")
-    email: str = Field(..., description="Employee email")
-    designation: str = Field(..., description="Current designation")
+    employee_id: str = Field(..., description="Employee ID", alias="employee_id")
+    name: str = Field(..., description="Employee name", alias="employee_name")
+    email: str = Field(..., description="Employee email", alias="employee_email")
+    designation: str = Field(..., description="Current designation", alias="employee_designation")
     available_percentage: int = Field(
-        ..., ge=0, le=100, description="Available capacity percentage"
+        ...,
+        ge=0,
+        le=100,
+        description="Available capacity percentage",
+        alias="employee_available_percentage",
     )
-    skills: List[EmployeeSkill] = Field(default_factory=list, description="Employee skills list")
+    skills: List[EmployeeSkill] = Field(
+        default_factory=list, description="Employee skills list", alias="employee_skills"
+    )
+
+    @validator("employee_id", pre=True)
+    def uuid_to_str(cls, v):
+        if isinstance(v, UUID):
+            return str(v)
+        return v
 
 
 class MatchingInput(BaseModel):
@@ -150,9 +167,8 @@ class MatchingAgent(BaseAgent):
 
         # Initialize LLM for resource matching
         self.llm = ChatOpenAI(
-            model="gpt-4o",
+            model="gpt-4.1",
             temperature=0.1,  # Low temperature for consistent matching
-            max_tokens=3000,
             api_key=self.config.api_key,
         )
 
@@ -329,6 +345,7 @@ Please analyze the available employees and provide:
 - For team combinations, include: team_members, skills_match (percentage), skills_matched, skills_missing
 - Extract only skill names from employee skills (ignore experience/dates)
 - Calculate skills_match as percentage of required skills covered by the team
+- GIVE OUTPUT IN THIS FORMAT ONLY:
 
 {format_instructions}
 """
