@@ -1,18 +1,16 @@
 """Main FastAPI application entry point"""
 
+# Configure structured logging for readable console output
+import logging
 from contextlib import asynccontextmanager
 
 import structlog
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
 from app.core.config import settings
 from app.core.database import create_tables
-from app.routers import ai, allocations, chat, employees, health, projects
+from app.routers import ai, health
 from app.routers.ai import initialize_orchestrator, shutdown_orchestrator
-
-# Configure structured logging for readable console output
-import logging
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 # Set the root logger level based on DEBUG setting
 log_level = logging.DEBUG if settings.DEBUG else logging.INFO
@@ -85,10 +83,6 @@ app.add_middleware(
 
 # Include routers
 app.include_router(health.router, prefix="/api/v1", tags=["health"])
-app.include_router(chat.router, prefix="/api/v1", tags=["chat"])
-app.include_router(employees.router, prefix="/api/v1", tags=["employees"])
-app.include_router(projects.router, prefix="/api/v1", tags=["projects"])
-app.include_router(allocations.router, prefix="/api/v1", tags=["allocations"])
 app.include_router(ai.router, prefix="/api/v1", tags=["ai"])
 
 
