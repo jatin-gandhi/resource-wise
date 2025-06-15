@@ -505,14 +505,36 @@ class AgentWorkflow:
             # Handle resource matching results (after matching)
             elif workflow_intent == "resource_matching" and current_stage == "matching_completed":
                 matching_results = state.get("query_result", {})
+                query_details = state.get("query_details", {})
+                db_result = state.get("database_result", {})
+
+                response_input = {
+                    "matched_resources": matching_results.get("matched_resources", {}),
+                    "team_combinations": matching_results.get("team_combinations", []),
+                    "project_details": state.get("project_details", {}),
+                    "original_query": state["user_input"],
+                    "user_id": state["context"].get("user_id"),
+                    "session_id": state["session_id"],
+                    "success": matching_results.get("success", True),
+                    "error": matching_results.get("error"),
+                    "error_type": matching_results.get("error_type"),
+                }
+
+                response_result = await self.response_agent.process(response_input)
 
                 final_result = {
-                    "intent": "resource_matching",
-                    "response": matching_results.get("response", "Resource matching completed."),
-                    "workflow_intent": workflow_intent,
-                    "success": matching_results.get("success", True),
-                    "matching_results": matching_results,
-                    "team_combinations": state.get("team_combinations", []),
+                    **state.get("query_result", {}),  # Keep intent classification
+                    "response": response_result.get("response", ""),
+                    "success": response_result.get("success", True),
+                    "result_count": response_result.get("result_count", 0),
+                    "sql_query": query_details.get("query", ""),
+                    "query_type": query_details.get("query_type", "resource_matching"),
+                    "tables_used": query_details.get("tables", []),
+                    "execution_time": db_result.get("execution_time", 0),
+                    "metadata": {
+                        **state.get("query_result", {}).get("metadata", {}),
+                        **response_result.get("metadata", {}),
+                    },
                 }
 
                 state["query_result"] = final_result
@@ -619,7 +641,7 @@ class AgentWorkflow:
         """
         try:
             logger.info(
-                "Starting resource matching",
+                "[GRAPH - RESOURCE MATCHING] Starting resource matching",
                 session_id=state["session_id"],
             )
 
@@ -638,7 +660,7 @@ class AgentWorkflow:
             )
 
             logger.info(
-                "Data transformation completed",
+                "[GRAPH - RESOURCE MATCHING] Data transformation completed",
                 raw_employee_count=len(raw_employees),
                 session_id=state["session_id"],
             )
@@ -652,10 +674,20 @@ class AgentWorkflow:
             # Run matching algorithm
             matching_result = await self.matching_agent.process(matching_input)
 
+            # Extract matched_resources from matching_result
+            matched_resources = matching_result.get("matching_results", {}).get(
+                "matched_resources", {}
+            )
+            for designation in matched_resources:
+                logger.info(
+                    f"[GRAPH - RESOURCE MATCHING] Matched Resources: {designation} - {len(matched_resources.get(designation))}"
+                )
+
             # Extract team combinations from result
             team_combinations = matching_result.get("matching_results", {}).get(
                 "possible_team_combinations", []
             )
+            logger.info(f"[GRAPH - RESOURCE MATCHING] Team Combinations: {len(team_combinations)}")
 
             # Store results in state
             state["team_combinations"] = team_combinations
@@ -665,16 +697,30 @@ class AgentWorkflow:
             if team_combinations:
                 response = json.dumps(matching_result.get("matching_results", {}))
             else:
-                response = "I couldn't find suitable team combinations with the available employees. You may want to adjust the project requirements or consider alternative resources."
+                response = "I couldn't find suitable resources for allocation to your project. You may want to adjust the project requirements or consider alternative resources."
+
+            # Determine success based on matched_resources and team_combinations
+            # Check for edge cases:
+            # 1. Empty matched_resources but valid team_combinations
+            # 2. Valid matched_resources but empty team_combinations
+            # 3. Both empty
+            # 4. Both populated
+            success = (
+                bool(matched_resources)
+                and bool(team_combinations)
+                and len(matched_resources) > 0
+                and len(team_combinations) > 0
+            )
 
             # Update final response
             final_result = {
                 **state.get("query_result", {}),
                 "response": response,
+                "matched_resources": matched_resources,
                 "team_combinations": team_combinations,
                 "team_combinations_count": len(team_combinations),
                 "matching_completed": True,
-                "success": len(team_combinations) > 0,
+                "success": success,
             }
 
             state["query_result"] = final_result

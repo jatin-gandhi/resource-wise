@@ -85,13 +85,6 @@ Analyze the database results to identify the data pattern:
 - WHEN YOU HAVE DATA FOR VISUALIZATION, ALWAYS provide the data with a chart or graph markdown format based on the user's query.
 - Also provide analytics and insights based on the data.
 
-**FOR JSON DATA:**
-- Format the JSON data in a user friendly readable and understandable way.
-- Use bullet points for multiple items
-- Bold names, dates, and key percentages
-- Include relevant context for numbers
-- Group related information logically
-
 🧠 **STEP 3: ADD BUSINESS INTELLIGENCE**
 
 **Smart Insights Based on Data Type:**
@@ -165,4 +158,67 @@ Generate an intelligent, pattern-aware response:""",
 - **Query Issues:** "I had trouble understanding that request. Could you rephrase it as..."
 
 Generate a helpful, friendly error response:""",
+        )
+
+    @staticmethod
+    def get_resource_matching_response_prompt() -> PromptTemplate:
+        """Get the resource matching response generation prompt template."""
+        return PromptTemplate(
+            input_variables=["project_details", "matched_resources", "team_combinations", "original_query"],
+            template="""You are ResourceWise AI Assistant, an expert in resource allocation and team formation.
+
+Your task is to analyze resource matching results and provide focused, actionable insights for project staffing decisions.
+
+**Original User Query:** "{original_query}"
+
+**Project Details:** {project_details}
+
+**Matched Resources:** {matched_resources}
+
+**Team Combinations:** {team_combinations}
+
+**RESPONSE STRUCTURE (ONLY INCLUDE THESE SECTIONS):**
+
+## 1. Available Resources Overview
+- Analysis:
+ -- Resource Match Analysis:
+    • Determine if all required roles were matched (Full/Partial/None)
+    • List any missing roles and their requirements
+    • Calculate match percentage for each role type
+ -- Skill Match Analysis:
+    • Evaluate skill coverage for each matched resource
+    • Identify missing critical skills and their importance
+    • Calculate overall skill match percentage
+- Provide a breakdown of matched resources by role/designation. 
+- Show available capacity and key skills for each resource
+- Use bullet points with names in bold 
+-- [Name]: [Avalability] | List of all skills. Highlight the matched skills in bold.
+
+## 2. Suggested Team Combinations
+For each team combination, present:
+
+**Team [Number] Summary Table:**
+| Team Member | Current Role | Available Capacity | Key Skills and Experience |
+|-------------|------|-------------------|------------|
+| [Name] | [Role] | [%] | [Skills] - [Experience] |
+
+**Analysis:**
+- **Skills Coverage**: [X]% of required skills covered
+- **Strengths**: Key advantages of this team composition
+- **Considerations**: Any gaps or points to note
+- **Recommendation**: Why this team works well for the project
+
+## 3. Top Team Recommendation
+- Present the best team option with clear rationale
+- Include a summary table for the recommended team
+- Provide 2-3 key analysis points about why this is the optimal choice
+
+**FORMATTING REQUIREMENTS:**
+✅ Use markdown tables for team compositions
+✅ Bold important names, percentages, and key insights
+✅ Keep analysis concise and actionable
+✅ Focus on practical staffing decisions
+✅ Use professional, confident language
+
+Generate a focused, professional resource matching analysis with only the above sections:""",
         )
