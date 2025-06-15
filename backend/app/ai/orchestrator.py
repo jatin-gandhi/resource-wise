@@ -13,6 +13,7 @@ from app.ai.services.context import ContextService
 from app.ai.services.stream import StreamService
 from app.ai.workflow.graph import AgentWorkflow
 from app.services.database import db_service
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 
 logger = structlog.get_logger()
 
@@ -34,6 +35,7 @@ class AIOrchestrator:
         self.workflow = AgentWorkflow(config)
         self.context_service = ContextService()
         self.stream_service = StreamService()
+        self.chat_history: list[BaseMessage] = []
 
         openai_status = "✓" if self.llm_service.client else "✗"
         # logger.info(f"orchestrator ready {openai_status} (with workflow)")
@@ -65,10 +67,6 @@ class AIOrchestrator:
                     session_id=session_id, user_id=user_id
                 )
 
-            # Add user message to history
-            self.context_service.add_to_history(
-                session_id=session_id, message={"role": "user", "content": query}
-            )
 
             # Send start event
             yield f"data: {json.dumps({'type': 'start', 'data': {'session_id': session_id}})}\n\n"
@@ -76,7 +74,7 @@ class AIOrchestrator:
             # Prepare workflow context
             workflow_context = {
                 "user_id": user_id,
-                "history": context.history if context else [],
+                'chat_history': self.chat_history
             }
 
             result = await self.workflow.process(
@@ -88,10 +86,11 @@ class AIOrchestrator:
             response_content = query_result.get(
                 "response", "I apologize, but I couldn't process your request."
             )
-            # Add assistant response to history
-            self.context_service.add_to_history(
-                session_id=session_id, message={"role": "assistant", "content": response_content}
-            )
+
+            self.chat_history.extend([
+                HumanMessage(content=query),
+                AIMessage(content=response_content)
+            ])
 
             # Send workflow metadata
             yield f"data: {json.dumps({'type': 'metadata', 'data': {'intent': query_result.get('intent', 'unknown'), 'requires_database': query_result.get('requires_database', False), 'sql_query': query_result.get('sql_query'), 'tables_used': query_result.get('tables_used', [])}})}\n\n"

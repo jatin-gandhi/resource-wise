@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.schemas.ai import QueryRequest
 from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 
 logger = structlog.get_logger()
 
@@ -46,7 +47,7 @@ class IntentAgent(BaseAgent):
 
         # Intent classification prompt
         self.intent_classification_prompt = PromptTemplate(
-            input_variables=["user_input", "context"],
+            input_variables=["user_input", "chat_history"],
             template="""You are an intelligent intent classifier for ResourceWise, an AI-powered resource allocation system.
 
 Your job is to analyze user input and determine their intent from these categories:
@@ -66,9 +67,11 @@ Your job is to analyze user input and determine their intent from these categori
 
 5. **UNKNOWN**: Unable to determine clear intent or ambiguous requests
 
-Context (previous conversation): {context}
 
-User Input: "{user_input}"
+{chat_history}
+
+Human: {user_input}
+
 
 CLASSIFICATION RULES:
 - Look for keywords related to searching, finding, querying, listing, showing data
@@ -85,12 +88,15 @@ Intent:""",
 
         # General response prompt for non-database queries
         self.general_response_prompt = PromptTemplate(
-            input_variables=["user_input", "intent_type", "context"],
+            input_variables=["user_input", "intent_type", "chat_history"],
             template="""You are ResourceWise AI Assistant, a helpful AI for resource allocation and project management.
 
 User Intent: {intent_type}
-User Input: "{user_input}"
-Context: {context}
+
+{chat_history}
+
+Human: {user_input}
+
 
 RESPONSE GUIDELINES:
 
@@ -145,7 +151,7 @@ Response:""",
             context_str = self._format_context(context)
 
             # Classify user intent
-            intent_type = await self._classify_intent(request.query, context_str)
+            intent_type = await self._classify_intent(request.query, context_str, context.get("chat_history", []))
             logger.info(
                 "[INTENT-AGENT] Intent classified",
                 intent=intent_type,
@@ -158,7 +164,7 @@ Response:""",
 
             # For non-database queries, generate response directly
             if not requires_database:
-                response = await self._generate_general_response(request, intent_type, context_str)
+                response = await self._generate_general_response(request, intent_type, context_str, context.get("chat_history", []))
                 return {
                     "intent": intent_type,
                     "response": response,
@@ -198,7 +204,7 @@ Response:""",
                 "agent_type": "intent",
             }
 
-    async def _classify_intent(self, user_input: str, context: str) -> IntentType:
+    async def _classify_intent(self, user_input: str, context: str, chat_history: list[BaseMessage]) -> IntentType:
         """Classify the user's intent.
 
         Args:
@@ -209,8 +215,8 @@ Response:""",
             Classified intent type
         """
         try:
-            chain_input = {"user_input": user_input, "context": context}
-
+            chain_input = {"user_input": user_input, "chat_history": chat_history}
+            logger.info(f"chain_input: {chain_input}")
             result = await self.classification_chain.ainvoke(chain_input)
             intent_str = str(result.content).strip().upper()
 
@@ -244,7 +250,7 @@ Response:""",
             return IntentType.UNKNOWN
 
     async def _generate_general_response(
-        self, request: QueryRequest, intent_type: IntentType, context: str
+        self, request: QueryRequest, intent_type: IntentType, context: str, chat_history: list[BaseMessage]
     ) -> str:
         """Generate response for non-database queries.
 
@@ -260,7 +266,7 @@ Response:""",
             chain_input = {
                 "user_input": request.query,
                 "intent_type": intent_type.value,
-                "context": context,
+                "chat_history": chat_history
             }
 
             result = await self.response_chain.ainvoke(chain_input)
