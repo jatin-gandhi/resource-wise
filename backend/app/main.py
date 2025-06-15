@@ -40,12 +40,12 @@ async def lifespan(app: FastAPI):
     try:
         # Create database tables
         await create_tables()
-        
+
         # Initialize AI orchestrator singleton
         await initialize_orchestrator()
-        
+
         logger.info("Resource Wise API startup complete ✓")
-        
+
     except Exception as e:
         logger.error(f"Failed to start Resource Wise API: {e}")
         raise
@@ -55,9 +55,9 @@ async def lifespan(app: FastAPI):
     try:
         # Shutdown AI orchestrator
         await shutdown_orchestrator()
-        
+
         logger.info("Resource Wise API shutdown complete ✓")
-        
+
     except Exception as e:
         logger.error(f"Error during Resource Wise API shutdown: {e}")
 

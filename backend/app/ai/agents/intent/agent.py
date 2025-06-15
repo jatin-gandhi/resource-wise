@@ -151,7 +151,9 @@ Response:""",
             context_str = self._format_context(context)
 
             # Classify user intent
-            intent_type = await self._classify_intent(request.query, context_str, context.get("chat_history", []))
+            intent_type = await self._classify_intent(
+                request.query, context_str, context.get("chat_history", [])
+            )
             logger.info(
                 "[INTENT-AGENT] Intent classified",
                 intent=intent_type,
@@ -164,7 +166,9 @@ Response:""",
 
             # For non-database queries, generate response directly
             if not requires_database:
-                response = await self._generate_general_response(request, intent_type, context_str, context.get("chat_history", []))
+                response = await self._generate_general_response(
+                    request, intent_type, context_str, context.get("chat_history", [])
+                )
                 return {
                     "intent": intent_type,
                     "response": response,
@@ -204,7 +208,9 @@ Response:""",
                 "agent_type": "intent",
             }
 
-    async def _classify_intent(self, user_input: str, context: str, chat_history: list[BaseMessage]) -> IntentType:
+    async def _classify_intent(
+        self, user_input: str, context: str, chat_history: list[BaseMessage]
+    ) -> IntentType:
         """Classify the user's intent.
 
         Args:
@@ -250,7 +256,11 @@ Response:""",
             return IntentType.UNKNOWN
 
     async def _generate_general_response(
-        self, request: QueryRequest, intent_type: IntentType, context: str, chat_history: list[BaseMessage]
+        self,
+        request: QueryRequest,
+        intent_type: IntentType,
+        context: str,
+        chat_history: list[BaseMessage],
     ) -> str:
         """Generate response for non-database queries.
 
@@ -266,7 +276,7 @@ Response:""",
             chain_input = {
                 "user_input": request.query,
                 "intent_type": intent_type.value,
-                "chat_history": chat_history
+                "chat_history": chat_history,
             }
 
             result = await self.response_chain.ainvoke(chain_input)

@@ -21,8 +21,8 @@ def get_orchestrator() -> AIOrchestrator:
     """Get singleton AI orchestrator instance."""
     if orchestrator_instance is None:
         raise HTTPException(
-            status_code=503, 
-            detail="AI service not initialized. Please wait for startup to complete."
+            status_code=503,
+            detail="AI service not initialized. Please wait for startup to complete.",
         )
     return orchestrator_instance
 
@@ -30,11 +30,11 @@ def get_orchestrator() -> AIOrchestrator:
 async def initialize_orchestrator() -> None:
     """Initialize the singleton AI orchestrator instance."""
     global orchestrator_instance
-    
+
     if orchestrator_instance is not None:
         logger.warning("AIOrchestrator already initialized")
         return
-    
+
     try:
         logger.info("Initializing AIOrchestrator singleton...")
         orchestrator_instance = AIOrchestrator()
@@ -47,7 +47,7 @@ async def initialize_orchestrator() -> None:
 async def shutdown_orchestrator() -> None:
     """Shutdown the singleton AI orchestrator instance."""
     global orchestrator_instance
-    
+
     if orchestrator_instance is not None:
         logger.info("Shutting down AIOrchestrator singleton...")
         orchestrator_instance = None

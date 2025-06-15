@@ -67,15 +67,11 @@ class AIOrchestrator:
                     session_id=session_id, user_id=user_id
                 )
 
-
             # Send start event
             yield f"data: {json.dumps({'type': 'start', 'data': {'session_id': session_id}})}\n\n"
 
             # Prepare workflow context
-            workflow_context = {
-                "user_id": user_id,
-                'chat_history': self.chat_history
-            }
+            workflow_context = {"user_id": user_id, "chat_history": self.chat_history}
 
             result = await self.workflow.process(
                 user_input=query, session_id=session_id, context=workflow_context
@@ -87,10 +83,9 @@ class AIOrchestrator:
                 "response", "I apologize, but I couldn't process your request."
             )
 
-            self.chat_history.extend([
-                HumanMessage(content=query),
-                AIMessage(content=response_content)
-            ])
+            self.chat_history.extend(
+                [HumanMessage(content=query), AIMessage(content=response_content)]
+            )
 
             # Send workflow metadata
             yield f"data: {json.dumps({'type': 'metadata', 'data': {'intent': query_result.get('intent', 'unknown'), 'requires_database': query_result.get('requires_database', False), 'sql_query': query_result.get('sql_query'), 'tables_used': query_result.get('tables_used', [])}})}\n\n"
