@@ -268,79 +268,298 @@ def create_test_employees():
 
 
 def create_test_scenario_1():
-    """Test Scenario 1: All resources fulfilled with all skill requirements covered."""
+    """Test Scenario 1: No allocation specified - defaults to 100% requirement."""
     return {
         "project_details": {
-            "name": "Mobile Banking App - Perfect Match",
+            "name": "Mobile Banking App - Default 100% Allocation",
             "duration": 3,
             "starting_from": "July",
             "skills_required": ["React Native", "TypeScript", "JavaScript", "Mobile Testing"],
-            "resources_required": {
-                "TL": 1,
-                "SSE": 2,
-                "SDE": 2,
-                "QA": 1
-            }
+            "resources_required": [
+                {"resource_type": "TL", "resource_count": 1},  # Defaults to 100%
+                {"resource_type": "SSE", "resource_count": 2}, # Defaults to 100%
+                {"resource_type": "SDE", "resource_count": 2}, # Defaults to 100%
+                {"resource_type": "QA", "resource_count": 1}   # Defaults to 100%
+            ]
         },
         "available_employees": create_test_employees()
     }
 
 
 def create_test_scenario_2():
-    """Test Scenario 2: Partial resources fulfilled with all skill requirements covered."""
+    """Test Scenario 2: Mixed allocation - some specified, some default to 100%."""
     return {
         "project_details": {
-            "name": "E-commerce Platform - Resource Shortage",
+            "name": "E-commerce Platform - Mixed Allocation",
             "duration": 4,
             "starting_from": "August",
             "skills_required": ["React Native", "TypeScript", "Node.js", "MongoDB"],
-            "resources_required": {
-                "TL": 3,  # Need 3 but only have 2 available
-                "SSE": 5,  # Need 5 but only have 3 available
-                "SDE": 4,  # Should be achievable
-                "QA": 2   # Should be achievable
-            }
+            "resources_required": [
+                {"resource_type": "TL", "resource_count": 1, "required_allocation_percentage": 50},  # 50% specified
+                {"resource_type": "SSE", "resource_count": 2},  # Defaults to 100%
+                {"resource_type": "SDE", "resource_count": 3, "required_allocation_percentage": 75}, # 75% specified
+                {"resource_type": "QA", "resource_count": 1}   # Defaults to 100%
+            ]
         },
         "available_employees": create_test_employees()
     }
 
 
 def create_test_scenario_3():
-    """Test Scenario 3: All resources fulfilled with partial skill requirements covered."""
+    """Test Scenario 3: All resources have allocation requirements."""
     return {
         "project_details": {
-            "name": "AI-Powered Analytics Dashboard",
+            "name": "AI-Powered Analytics Dashboard - All Allocation Required",
             "duration": 5,
             "starting_from": "September",
             "skills_required": ["Python", "Machine Learning", "TensorFlow", "Kubernetes", "Docker", "GraphQL"],
-            "resources_required": {
-                "TL": 1,   # Available
-                "SSE": 2,  # Available
-                "SDE": 3   # Available
-            }
+            "resources_required": [
+                {"resource_type": "ARCH", "resource_count": 1, "required_allocation_percentage": 25},
+                {"resource_type": "TL", "resource_count": 1, "required_allocation_percentage": 50},
+                {"resource_type": "SSE", "resource_count": 1, "required_allocation_percentage": 25},
+                {"resource_type": "PM", "resource_count": 1, "required_allocation_percentage": 25}
+            ]
         },
         "available_employees": create_test_employees()
     }
 
 
 def create_test_scenario_4():
-    """Test Scenario 4: Partial resources fulfilled with partial skill requirements covered."""
+    """Test Scenario 4: Case 1 - Mixed format (1 TL, 1 SE, 2 SDE, 1 QA 50%)."""
     return {
         "project_details": {
-            "name": "Enterprise Blockchain Platform",
+            "name": "Case 1 Test - Mixed Requirements",
             "duration": 8,
             "starting_from": "October",
-            "skills_required": ["Solidity", "Web3", "Ethereum", "Rust", "Go", "Microservices", "Redis"],
-            "resources_required": {
-                "ARCH": 2,  # Need 2 but only have 1 available
-                "TL": 3,    # Need 3 but only have 2 available
-                "SSE": 6,   # Need 6 but only have 3 available
-                "SDE": 8,   # Need 8 but only have 5 available
-                "PE": 2     # Need 2 but only have 1 available
-            }
+            "skills_required": ["React Native", "TypeScript", "Mobile Testing"],
+            "resources_required": [
+                {"resource_type": "TL", "resource_count": 1},  # No allocation requirement
+                {"resource_type": "SE", "resource_count": 1},  # No allocation requirement
+                {"resource_type": "SDE", "resource_count": 2}, # No allocation requirement
+                {"resource_type": "QA", "resource_count": 1, "required_allocation_percentage": 50}  # 50% allocation required
+            ]
         },
         "available_employees": create_test_employees()
     }
+
+
+def create_test_scenario_5():
+    """Test Scenario 5: Case 2 - All with allocation percentages (1 TL 50%, 1 SE 100%, 2 SDE 100%, 1 QA 50%)."""
+    return {
+        "project_details": {
+            "name": "Case 2 Test - All Allocation Requirements",
+            "duration": 6,
+            "starting_from": "November",
+            "skills_required": ["React Native", "TypeScript", "Node.js", "Mobile Testing"],
+            "resources_required": [
+                {"resource_type": "TL", "resource_count": 1, "required_allocation_percentage": 50},
+                {"resource_type": "SE", "resource_count": 1, "required_allocation_percentage": 100},
+                {"resource_type": "SDE", "resource_count": 2, "required_allocation_percentage": 100},
+                {"resource_type": "QA", "resource_count": 1, "required_allocation_percentage": 50}
+            ]
+        },
+        "available_employees": create_test_employees()
+    }
+
+
+def create_test_scenario_6():
+    """Test Scenario 6: Insufficient Allocation - QA needs 100% but only 50% available."""
+    return {
+        "project_details": {
+            "name": "Insufficient Allocation Test",
+            "duration": 3,
+            "starting_from": "December",
+            "skills_required": ["Manual Testing", "Bug Tracking"],
+            "resources_required": [
+                {"resource_type": "QA", "resource_count": 1, "required_allocation_percentage": 100}
+            ]
+        },
+        "available_employees": [
+            {
+                "employee_id": "qa_001",
+                "name": "Maria Garcia",
+                "email": "maria.garcia@company.com",
+                "designation": "QA",
+                "available_percentage": 50,  # Only 50% available, but 100% required
+                "skills": [
+                    {"skill_name": "Manual Testing", "experience_months": 36, "last_used": "Current"},
+                    {"skill_name": "Bug Tracking", "experience_months": 42, "last_used": "Current"}
+                ]
+            }
+        ]
+    }
+
+
+def create_test_scenario_7():
+    """Test Scenario 7: No Employees Matching Skills - Go, Ruby, Rust skills not available."""
+    return {
+        "project_details": {
+            "name": "No Skills Match Test",
+            "duration": 4,
+            "starting_from": "January",
+            "skills_required": ["Go", "Ruby", "Rust"],  # Skills no one has
+            "resources_required": [
+                {"resource_type": "TL", "resource_count": 1},
+                {"resource_type": "SDE", "resource_count": 2}
+            ]
+        },
+        "available_employees": [
+            {
+                "employee_id": "tl_001",
+                "name": "Alex Chen",
+                "email": "alex.chen@company.com",
+                "designation": "TL",
+                "available_percentage": 100,
+                "skills": [
+                    {"skill_name": "React Native", "experience_months": 36, "last_used": "Current"},
+                    {"skill_name": "TypeScript", "experience_months": 42, "last_used": "Current"}
+                ]
+            },
+            {
+                "employee_id": "sde_001",
+                "name": "Emily Davis",
+                "email": "emily.davis@company.com",
+                "designation": "SDE",
+                "available_percentage": 100,
+                "skills": [
+                    {"skill_name": "JavaScript", "experience_months": 24, "last_used": "Current"},
+                    {"skill_name": "CSS", "experience_months": 30, "last_used": "Current"}
+                ]
+            },
+            {
+                "employee_id": "sde_002",
+                "name": "David Kim",
+                "email": "david.kim@company.com",
+                "designation": "SDE",
+                "available_percentage": 100,
+                "skills": [
+                    {"skill_name": "React", "experience_months": 22, "last_used": "2024-01"},
+                    {"skill_name": "Git", "experience_months": 26, "last_used": "Current"}
+                ]
+            }
+        ]
+    }
+
+
+def create_test_scenario_8():
+    """Test Scenario 8: No Available Employees - All have 0% availability."""
+    return {
+        "project_details": {
+            "name": "No Availability Test",
+            "duration": 3,
+            "starting_from": "February",
+            "skills_required": ["React Native", "TypeScript"],
+            "resources_required": [
+                {"resource_type": "TL", "resource_count": 1},
+                {"resource_type": "SDE", "resource_count": 1}
+            ]
+        },
+        "available_employees": [
+            {
+                "employee_id": "tl_001",
+                "name": "Alex Chen",
+                "email": "alex.chen@company.com",
+                "designation": "TL",
+                "available_percentage": 0,  # No availability
+                "skills": [
+                    {"skill_name": "React Native", "experience_months": 36, "last_used": "Current"},
+                    {"skill_name": "TypeScript", "experience_months": 42, "last_used": "Current"}
+                ]
+            },
+            {
+                "employee_id": "sde_001",
+                "name": "Emily Davis",
+                "email": "emily.davis@company.com",
+                "designation": "SDE",
+                "available_percentage": 0,  # No availability
+                "skills": [
+                    {"skill_name": "React Native", "experience_months": 18, "last_used": "Current"},
+                    {"skill_name": "TypeScript", "experience_months": 20, "last_used": "Current"}
+                ]
+            }
+        ]
+    }
+
+
+def create_test_scenario_9():
+    """Test Scenario 9: Wrong Designation with Right Skills - SDE has Python but TL needed."""
+    return {
+        "project_details": {
+            "name": "Wrong Designation Test",
+            "duration": 3,
+            "starting_from": "March",
+            "skills_required": ["Python", "Django"],
+            "resources_required": [
+                {"resource_type": "TL", "resource_count": 1}  # Need TL specifically
+            ]
+        },
+        "available_employees": [
+            {
+                "employee_id": "sde_001",
+                "name": "Python Expert SDE",
+                "email": "python.expert@company.com",
+                "designation": "SDE",  # Wrong designation (SDE instead of TL)
+                "available_percentage": 100,
+                "skills": [
+                    {"skill_name": "Python", "experience_months": 48, "last_used": "Current"},
+                    {"skill_name": "Django", "experience_months": 36, "last_used": "Current"}
+                ]
+            },
+            {
+                "employee_id": "tl_001",
+                "name": "Non-Python TL",
+                "email": "nonpython.tl@company.com",
+                "designation": "TL",  # Right designation
+                "available_percentage": 100,
+                "skills": [
+                    {"skill_name": "JavaScript", "experience_months": 60, "last_used": "Current"},
+                    {"skill_name": "React", "experience_months": 48, "last_used": "Current"}
+                ]
+            }
+        ]
+    }
+
+
+def create_test_scenario_10():
+    """Test Scenario 10: Allocation Just Below Threshold - SSE needs 75% but only 70% available."""
+    return {
+        "project_details": {
+            "name": "Below Threshold Test",
+            "duration": 3,
+            "starting_from": "April",
+            "skills_required": ["React Native", "TypeScript"],
+            "resources_required": [
+                {"resource_type": "SSE", "resource_count": 1, "required_allocation_percentage": 75}
+            ]
+        },
+        "available_employees": [
+            {
+                "employee_id": "sse_001",
+                "name": "Almost Available SSE",
+                "email": "almost.available@company.com",
+                "designation": "SSE",
+                "available_percentage": 70,  # Just below 75% threshold
+                "skills": [
+                    {"skill_name": "React Native", "experience_months": 30, "last_used": "Current"},
+                    {"skill_name": "TypeScript", "experience_months": 36, "last_used": "Current"}
+                ]
+            },
+            {
+                "employee_id": "sse_002",
+                "name": "Fully Available SSE",
+                "email": "fully.available@company.com",
+                "designation": "SSE",
+                "available_percentage": 100,  # Above threshold
+                "skills": [
+                    {"skill_name": "React Native", "experience_months": 24, "last_used": "Current"},
+                    {"skill_name": "JavaScript", "experience_months": 30, "last_used": "Current"}
+                ]
+            }
+        ]
+    }
+
+
+
 
 
 def print_results(scenario_name: str, results: Dict[str, Any], test_data: Dict[str, Any]):
@@ -363,10 +582,17 @@ def print_results(scenario_name: str, results: Dict[str, Any], test_data: Dict[s
     print(f"Project: {project_details.get('name', 'Unknown')}")
     
     # Resource analysis
-    required_resources = project_details.get("resources_required", {})
+    required_resources = project_details.get("resources_required", [])
     matched_resources = matching_results.get("matched_resources", {})
     
-    total_required = sum(required_resources.values())
+    # Handle new list format
+    total_required = 0
+    for requirement in required_resources:
+        if isinstance(requirement, dict):
+            total_required += requirement.get("resource_count", 0)
+        else:
+            total_required += 1  # Fallback
+    
     total_matched = sum(len(employees) for employees in matched_resources.values())
     fulfillment_rate = (total_matched/total_required*100) if total_required > 0 else 0
     
@@ -374,8 +600,17 @@ def print_results(scenario_name: str, results: Dict[str, Any], test_data: Dict[s
     
     # Resource breakdown
     print(f"Resource Breakdown:")
-    for designation, count in required_resources.items():
-        matched_count = len(matched_resources.get(designation, []))
+    for requirement in required_resources:
+        if isinstance(requirement, dict):
+            resource_type = requirement.get("resource_type", "Unknown")
+            count = requirement.get("resource_count", 0)
+            allocation = requirement.get("required_allocation_percentage")
+        else:
+            resource_type = "Unknown"
+            count = 1
+            allocation = None
+            
+        matched_count = len(matched_resources.get(resource_type, []))
         fulfillment = (matched_count / count * 100) if count > 0 else 0
         
         if matched_count >= count:
@@ -384,8 +619,9 @@ def print_results(scenario_name: str, results: Dict[str, Any], test_data: Dict[s
             status = "PARTIAL"
         else:
             status = "MISSING"
-            
-        print(f"  {designation}: {matched_count}/{count} ({fulfillment:.0f}%) - {status}")
+        
+        allocation_text = f" ({allocation}% alloc)" if allocation is not None else ""
+        print(f"  {resource_type}: {matched_count}/{count}{allocation_text} ({fulfillment:.0f}%) - {status}")
     
     # Skills analysis
     team_combinations = matching_results.get("possible_team_combinations", [])
@@ -486,7 +722,19 @@ async def run_test_scenario(agent: MatchingAgent, scenario_name: str, test_data:
     print(f"Project: {project_details['name']}")
     print(f"Duration: {project_details['duration']} months")
     print(f"Skills: {', '.join(project_details['skills_required'])}")
-    print(f"Resources: {dict(project_details['resources_required'])}")
+    
+    # Format resources properly for the new list format
+    resources_text = []
+    for req in project_details['resources_required']:
+        resource_type = req.get('resource_type', 'Unknown')
+        count = req.get('resource_count', 0)
+        allocation = req.get('required_allocation_percentage')
+        if allocation is not None:
+            resources_text.append(f"{count} {resource_type} {allocation}%")
+        else:
+            resources_text.append(f"{count} {resource_type}")
+    
+    print(f"Resources: {', '.join(resources_text)}")
     print(f"Employee Pool: {len(test_data['available_employees'])} candidates")
     print(f"\nProcessing...")
     
@@ -514,14 +762,20 @@ async def run_test_scenario(agent: MatchingAgent, scenario_name: str, test_data:
 
 async def main():
     """Main test function."""
-    print("Initializing Matching Agent Test Suite")
-    print("=" * 60)
-    print("Testing 4 comprehensive scenarios to evaluate matching capabilities:")
-    print("1. All resources fulfilled + All skills covered")
-    print("2. Partial resources fulfilled + All skills covered") 
-    print("3. All resources fulfilled + Partial skills covered")
-    print("4. Partial resources fulfilled + Partial skills covered")
-    print("=" * 60)
+    print("Initializing Comprehensive Matching Agent Test Suite")
+    print("=" * 80)
+    print("Testing 10 scenarios including edge cases with availability-first matching:")
+    print("1. Default allocation (100%) - no percentages specified")
+    print("2. Mixed allocation - some specified, some default to 100%") 
+    print("3. All resources have specific allocation requirements")
+    print("4. Case 1 test - 1 TL, 1 SE, 2 SDE, 1 QA 50%")
+    print("5. Case 2 test - 1 TL 50%, 1 SE 100%, 2 SDE 100%, 1 QA 50%")
+    print("6. Insufficient allocation - QA needs 100% but only 50% available")
+    print("7. No skills match - Go, Ruby, Rust skills not available")
+    print("8. No availability - All employees at 0%")
+    print("9. Wrong designation - SDE has Python but TL needed")
+    print("10. Below threshold - SSE needs 75% but only 70% available")
+    print("=" * 80)
     
     # Initialize the agent
     config = AIConfig()
@@ -529,10 +783,16 @@ async def main():
     
     # Test scenarios
     scenarios = [
-        ("SCENARIO 1: PERFECT MATCH", create_test_scenario_1()),
-        ("SCENARIO 2: RESOURCE SHORTAGE", create_test_scenario_2()),
-        ("SCENARIO 3: SKILL GAPS", create_test_scenario_3()),
-        ("SCENARIO 4: CRITICAL SHORTFALL", create_test_scenario_4())
+        ("SCENARIO 1: DEFAULT 100%", create_test_scenario_1()),
+        ("SCENARIO 2: MIXED ALLOCATION", create_test_scenario_2()),
+        ("SCENARIO 3: ALL SPECIFIED", create_test_scenario_3()),
+        ("SCENARIO 4: CASE 1 TEST", create_test_scenario_4()),
+        ("SCENARIO 5: CASE 2 TEST", create_test_scenario_5()),
+        ("SCENARIO 6: INSUFFICIENT ALLOCATION", create_test_scenario_6()),
+        ("SCENARIO 7: NO SKILLS MATCH", create_test_scenario_7()),
+        ("SCENARIO 8: NO AVAILABILITY", create_test_scenario_8()),
+        ("SCENARIO 9: WRONG DESIGNATION", create_test_scenario_9()),
+        ("SCENARIO 10: BELOW THRESHOLD", create_test_scenario_10())
     ]
     
     results = []
@@ -577,10 +837,17 @@ async def main():
             
             # Calculate metrics
             project_details = test_data.get("project_details", {})
-            required_resources = project_details.get("resources_required", {})
+            required_resources = project_details.get("resources_required", [])
             matched_resources = matching_results.get("matched_resources", {})
             
-            total_required = sum(required_resources.values())
+            # Handle new list format
+            total_required = 0
+            for requirement in required_resources:
+                if isinstance(requirement, dict):
+                    total_required += requirement.get("resource_count", 0)
+                else:
+                    total_required += 1  # Fallback
+                    
             total_matched = sum(len(employees) for employees in matched_resources.values())
             resource_fulfillment = (total_matched/total_required*100) if total_required > 0 else 0
             
@@ -614,15 +881,15 @@ async def main():
     
     # Overall statistics
     print(f"OVERALL STATISTICS:")
-    print(f"  Successful Scenarios: {successful_scenarios}/4")
-    print(f"  Passed Verifications: {passed_verifications}/4")
+    print(f"  Successful Scenarios: {successful_scenarios}/10")
+    print(f"  Passed Verifications: {passed_verifications}/10")
     print(f"  Total Warnings: {total_warnings}")
     print(f"  Total Errors: {total_errors}")
     print(f"  Total Processing Time: {total_processing_time}ms")
     print(f"  Average Processing Time: {total_processing_time/successful_scenarios if successful_scenarios > 0 else 0:.1f}ms")
     
     # Performance assessment
-    if successful_scenarios == 4:
+    if successful_scenarios == 10:
         if total_processing_time < 10000:  # Less than 10 seconds total
             performance = "EXCELLENT PERFORMANCE"
         elif total_processing_time < 20000:  # Less than 20 seconds total
@@ -633,12 +900,12 @@ async def main():
         performance = "PERFORMANCE ISSUES DETECTED"
     
     # Verification assessment
-    if passed_verifications == 4 and total_errors == 0:
+    if passed_verifications == 10 and total_errors == 0:
         if total_warnings == 0:
             verification_assessment = "PERFECT VERIFICATION"
         else:
             verification_assessment = "GOOD VERIFICATION (with warnings)"
-    elif passed_verifications >= 3:
+    elif passed_verifications >= 8:
         verification_assessment = "ACCEPTABLE VERIFICATION"
     else:
         verification_assessment = "VERIFICATION ISSUES DETECTED"
@@ -686,12 +953,23 @@ def get_expected_matches_for_scenario(scenario_name: str, test_data: Dict[str, A
     total_required = 0
     total_available = 0
     
-    for designation, required_count in required_resources.items():
-        available_count = available_by_designation.get(designation, 0)
+    for requirement in required_resources:
+        # Handle new list format
+        if isinstance(requirement, dict):
+            resource_type = requirement.get("resource_type", "Unknown")
+            required_count = requirement.get("resource_count", 0)
+            required_allocation = requirement.get("required_allocation_percentage")
+        else:
+            resource_type = "Unknown"
+            required_count = 1
+            required_allocation = None
+            
+        available_count = available_by_designation.get(resource_type, 0)
         fulfilled_count = min(required_count, available_count)
         
-        expected_resource_fulfillment[designation] = {
+        expected_resource_fulfillment[resource_type] = {
             "required": required_count,
+            "required_allocation": required_allocation,
             "available": available_count,
             "fulfilled": fulfilled_count,
             "fulfillment_rate": (fulfilled_count / required_count * 100) if required_count > 0 else 0
@@ -715,26 +993,60 @@ def get_expected_matches_for_scenario(scenario_name: str, test_data: Dict[str, A
     skills_coverage_rate = (len(covered_skills) / len(required_skills) * 100) if required_skills else 0
     
     # Scenario-specific expectations
-    if "Perfect Match" in project_details["name"]:
+    if "Perfect Match" in project_details["name"] or "Mobile Banking App - Perfect Match" in project_details["name"]:
         expected_assessment = "EXCELLENT"
         min_resource_fulfillment = 100
         min_skills_coverage = 100
-    elif "Resource Shortage" in project_details["name"]:
+    elif "Mixed Allocation" in project_details["name"]:
         expected_assessment = "GOOD"
-        min_resource_fulfillment = 60
-        min_skills_coverage = 80
-    elif "Skill Gaps" in project_details["name"]:
-        expected_assessment = "CHALLENGING"
         min_resource_fulfillment = 80
-        min_skills_coverage = 30
-    elif "Critical Shortfall" in project_details["name"]:
-        expected_assessment = "CRITICAL"
-        min_resource_fulfillment = 40
+        min_skills_coverage = 75
+    elif "All Allocation Required" in project_details["name"]:
+        expected_assessment = "CHALLENGING"
+        min_resource_fulfillment = 60
         min_skills_coverage = 20
-    else:
-        expected_assessment = "UNKNOWN"
+    elif "Case 1 Test" in project_details["name"] or "Case 2 Test" in project_details["name"]:
+        expected_assessment = "GOOD"
+        min_resource_fulfillment = 70
+        min_skills_coverage = 60
+    elif "Insufficient Allocation" in project_details["name"]:
+        expected_assessment = "CRITICAL"
         min_resource_fulfillment = 0
         min_skills_coverage = 0
+    elif "No Skills Match" in project_details["name"]:
+        expected_assessment = "CHALLENGING"
+        min_resource_fulfillment = 100
+        min_skills_coverage = 0
+    elif "No Availability" in project_details["name"]:
+        expected_assessment = "CRITICAL"
+        min_resource_fulfillment = 0
+        min_skills_coverage = 0
+    elif "Wrong Designation" in project_details["name"]:
+        expected_assessment = "CHALLENGING"
+        min_resource_fulfillment = 50
+        min_skills_coverage = 50
+    elif "Below Threshold" in project_details["name"]:
+        expected_assessment = "GOOD"
+        min_resource_fulfillment = 50
+        min_skills_coverage = 80
+    else:
+        expected_assessment = "UNKNOWN"
+        min_resource_fulfillment = 50
+        min_skills_coverage = 50
+    
+    # Determine if team combinations should be expected based on scenario type
+    should_have_team_combinations = True
+    
+    # Edge cases where NO team combinations are expected
+    if ("No Availability" in project_details["name"] or 
+        "Insufficient Allocation" in project_details["name"]):
+        should_have_team_combinations = False
+    # Cases where team combinations might be possible but with limitations
+    elif overall_fulfillment_rate == 0:
+        should_have_team_combinations = False
+    # Normal cases - expect combinations if there are available resources
+    else:
+        should_have_team_combinations = overall_fulfillment_rate > 0
     
     return {
         "scenario_name": scenario_name,
@@ -747,7 +1059,7 @@ def get_expected_matches_for_scenario(scenario_name: str, test_data: Dict[str, A
         "employees_with_skills": len(employees_with_required_skills),
         "min_resource_fulfillment": min_resource_fulfillment,
         "min_skills_coverage": min_skills_coverage,
-        "should_have_team_combinations": overall_fulfillment_rate > 0 and skills_coverage_rate > 0
+        "should_have_team_combinations": should_have_team_combinations
     }
 
 
@@ -774,11 +1086,23 @@ def verify_matching_results(expected: Dict[str, Any], actual_results: Dict[str, 
     project_details = test_data["project_details"]
     required_resources = project_details["resources_required"]
     
-    total_required = sum(required_resources.values())
+    # Handle new list format
+    total_required = 0
+    for requirement in required_resources:
+        if isinstance(requirement, dict):
+            total_required += requirement.get("resource_count", 0)
+        else:
+            total_required += 1  # Fallback
+            
     total_matched = sum(len(employees) for employees in matched_resources.values())
     actual_fulfillment_rate = (total_matched / total_required * 100) if total_required > 0 else 0
     
     # Verify resource counts by designation
+    project_name = test_data["project_details"]["name"]
+    is_edge_case = ("No Availability" in project_name or 
+                   "Insufficient Allocation" in project_name or
+                   "Below Threshold" in project_name)
+    
     for designation, expected_info in expected["resource_fulfillment"].items():
         actual_matched = len(matched_resources.get(designation, []))
         expected_max = expected_info["available"]
@@ -790,7 +1114,17 @@ def verify_matching_results(expected: Dict[str, Any], actual_results: Dict[str, 
             )
             verification_results["overall_pass"] = False
         
-        if actual_matched < min(required_count, expected_max) * 0.8:  # Allow 20% tolerance
+        # For edge cases where 0 matching is expected due to constraints
+        if is_edge_case and actual_matched == 0 and expected["min_resource_fulfillment"] == 0:
+            # For edge cases where 0 matching is expected, this is correct
+            verification_results["checks"].append(f"✓ Correctly filtered out {designation} due to availability constraints")
+        # For normal cases, warn about low matching
+        elif not is_edge_case and actual_matched < min(required_count, expected_max) * 0.8:  # Allow 20% tolerance
+            verification_results["warnings"].append(
+                f"Low {designation} matching: got {actual_matched}, expected ~{min(required_count, expected_max)}"
+            )
+        # For edge cases where some matching occurs but it's below expected (like Below Threshold case)
+        elif is_edge_case and actual_matched > 0 and actual_matched < min(required_count, expected_max) * 0.8:
             verification_results["warnings"].append(
                 f"Low {designation} matching: got {actual_matched}, expected ~{min(required_count, expected_max)}"
             )
