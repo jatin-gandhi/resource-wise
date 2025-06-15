@@ -61,11 +61,11 @@ class FuzzyClassifier:
             # Parse the structured response
             parsed_result = self._parse_llm_response(response_text)
 
-            # If LLM says it's fuzzy, use fallback method to extract the actual fuzzy terms
+            # If LLM says it's fuzzy, extract fuzzy terms without re-classifying
             # since the LLM only returns classification, not the specific terms
             if parsed_result["classification"] == "fuzzy":
-                fallback_result = self._fallback_classification(query)
-                parsed_result["fuzzy_terms"] = fallback_result["fuzzy_terms"]
+                fuzzy_terms = self._extract_fuzzy_terms(query)
+                parsed_result["fuzzy_terms"] = fuzzy_terms
 
             # Validate classification
             if parsed_result["classification"] not in ["fuzzy", "precise"]:
@@ -114,9 +114,8 @@ class FuzzyClassifier:
 
             # The prompt asks for a simple one-word response: "FUZZY" or "PRECISE"
             if response_text == "FUZZY":
-                # For fuzzy classification, we'll use the fallback method to extract terms
-                # since the LLM only returns the classification, not the specific terms
-                fallback_result = self._fallback_classification("")  # We'll get terms from fallback
+                # LLM only returns classification, not the specific terms
+                # The main classify() method will extract terms using fallback
                 return {"classification": "fuzzy", "fuzzy_terms": []}
             elif response_text == "PRECISE":
                 return {"classification": "precise", "fuzzy_terms": []}
@@ -187,8 +186,9 @@ class FuzzyClassifier:
             r"\bworking on\s+(active|customer|internal|completed)\s+projects?\b",
             r"\bassigned to\s+projects?\b",
             r"\ballocated to\s+projects?\b",
-            # Allocation queries
-            r"\b(overallocated|underutilized|available)\s+employees?\b",
+            # Allocation queries (but not skill-based availability queries)
+            r"\b(overallocated|underutilized)\s+employees?\b",
+            r"\bavailable\s+employees?\s*$",  # Only pure availability queries without additional criteria
             # Specific skill queries
             r"\bemployees?\s+with\s+(React|Java|Python|JavaScript|AWS|Docker|specific)\s+skills?\b",
         ]
@@ -234,6 +234,70 @@ class FuzzyClassifier:
         classification = "fuzzy" if fuzzy_terms else "precise"
 
         return {"classification": classification, "fuzzy_terms": fuzzy_terms}
+
+    def _extract_fuzzy_terms(self, query: str) -> List[str]:
+        """Extract fuzzy terms from query without classification.
+
+        Used when LLM has already classified the query as fuzzy.
+
+        Args:
+            query: User query to extract terms from
+
+        Returns:
+            List of fuzzy terms found in the query
+        """
+        fuzzy_terms = []
+        query_lower = query.lower()
+
+        # Same fuzzy patterns as in _fallback_classification
+        fuzzy_patterns = [
+            # Skill categories
+            r"\b(frontend|backend|mobile|cloud|data|web|design|analytics|devops|security|testing)\b",
+            # Experience levels and expertise
+            r"\b(senior|junior|experienced|lead|management|leadership|expert|specialist)\b",
+            # Role abbreviations
+            r"\b(SSE|TL|PM|QA|SE|SDE|BA|UX|ARCH|PE|TDO)\b",
+            # Team references
+            r"\b(design team|qa team|backend team|frontend team|mobile team|cloud team|data team)\b",
+            # Skill experience queries (but not project status)
+            r"\bdevelopers?\s+with\s+\w+\s+experience\b",
+            r"\bwho knows\s+\w+",
+            r"\bexperts?\s+in\s+\w+",
+            # General developer references (broad role term)
+            r"\bdevelopers?\b(?!\s+with\s+(React|Java|Python|JavaScript|specific))",
+            # Vague descriptors (excluding project status)
+            r"\b(good at|skilled in|familiar with|proficient in)\b",
+        ]
+
+        # Extract fuzzy terms (no precise pattern checking since LLM already said it's fuzzy)
+        for pattern in fuzzy_patterns:
+            matches = re.findall(pattern, query_lower, re.IGNORECASE)
+            for match in matches:
+                if isinstance(match, tuple):
+                    fuzzy_terms.extend(match)
+                else:
+                    fuzzy_terms.append(match)
+
+        # Special handling for "developers" - only fuzzy if not with specific skills
+        if "developers" in query_lower:
+            # Check if it's with specific skills
+            specific_skills = [
+                "react",
+                "java",
+                "python",
+                "javascript",
+                "aws",
+                "docker",
+                "kubernetes",
+            ]
+            has_specific_skill = any(skill in query_lower for skill in specific_skills)
+            if not has_specific_skill:
+                fuzzy_terms.append("developers")
+
+        # Remove duplicates while preserving order
+        fuzzy_terms = list(dict.fromkeys(fuzzy_terms))
+
+        return fuzzy_terms
 
     async def is_fuzzy(self, query: str) -> bool:
         """Check if query is fuzzy (convenience method).
