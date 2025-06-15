@@ -243,158 +243,44 @@ class ResponseAgent(BaseAgent):
                 "agent_type": "response",
             }
 
-    def _prepare_results_for_llm(self, db_results: list[dict]) -> str:
-        """Prepare database results for LLM processing with intelligent formatting.
+    def _prepare_results_for_llm(self, db_results: list[dict], max_rows: int = 50) -> str:
+        """Prepare database results for LLM processing.
 
         Args:
             db_results: Raw database results
+            max_rows: Maximum number of rows to include
 
         Returns:
-            Formatted string representation of results optimized for the result count
+            Formatted string representation of results
         """
         if not db_results:
             return "No results found."
 
-        result_count = len(db_results)
+        # Limit results to avoid token limits
+        limited_results = db_results[:max_rows]
 
-        # Apply different strategies based on result count
-        if result_count == 1:
-            return self._format_single_result(db_results[0])
-        elif result_count <= 5:
-            return self._format_small_set(db_results)
-        elif result_count <= 20:
-            return self._format_medium_set(db_results)
-        elif result_count <= 50:
-            return self._format_large_set(db_results)
-        else:
-            return self._format_very_large_set(db_results)
-
-    def _format_single_result(self, result: dict) -> str:
-        """Format a single result with full detail."""
-        clean_result = self._clean_row_data(result)
-        return f"Single Result: {clean_result}"
-
-    def _format_small_set(self, results: list[dict]) -> str:
-        """Format 2-5 results with detailed information."""
+        # Format as clean, structured data for LLM to intelligently process
         formatted_results = []
-        for i, row in enumerate(results, 1):
-            clean_row = self._clean_row_data(row)
-            formatted_results.append(f"Record {i}: {clean_row}")
-        return "\n".join(formatted_results)
+        for i, row in enumerate(limited_results, 1):
+            # Clean up the row data
+            clean_row = {}
+            for key, value in row.items():
+                if value is not None:
+                    # Convert values to strings and limit length
+                    str_value = str(value)
+                    if len(str_value) > 100:
+                        str_value = str_value[:97] + "..."
+                    clean_row[key] = str_value
 
-    def _format_medium_set(self, results: list[dict]) -> str:
-        """Format 6-20 results optimized for table presentation."""
-        # Include all results for medium sets
-        formatted_results = []
-        for i, row in enumerate(results, 1):
-            clean_row = self._clean_row_data(row)
-            formatted_results.append(f"Row {i}: {clean_row}")
-
-        result_text = "\n".join(formatted_results)
-        result_text += (
-            f"\n\nTotal Records: {len(results)} (All records included for table formatting)"
-        )
-        return result_text
-
-    def _format_large_set(self, results: list[dict]) -> str:
-        """Format 21-50 results with summary + key data."""
-        # Show first 30 results + summary
-        sample_size = min(30, len(results))
-        formatted_results = []
-
-        for i, row in enumerate(results[:sample_size], 1):
-            clean_row = self._clean_row_data(row)
             formatted_results.append(f"Row {i}: {clean_row}")
 
         result_text = "\n".join(formatted_results)
 
-        if len(results) > sample_size:
-            result_text += f"\n\n[Showing first {sample_size} of {len(results)} total records]"
-            result_text += (
-                f"\nRemaining {len(results) - sample_size} records available for analysis."
-            )
+        # Add truncation notice if needed
+        if len(db_results) > max_rows:
+            result_text += f"\n... and {len(db_results) - max_rows} more results"
 
-        # Add summary statistics
-        result_text += self._generate_summary_stats(results)
         return result_text
-
-    def _format_very_large_set(self, results: list[dict]) -> str:
-        """Format 50+ results with analytics focus."""
-        # Show sample + comprehensive analytics
-        sample_size = 20
-        formatted_results = []
-
-        for i, row in enumerate(results[:sample_size], 1):
-            clean_row = self._clean_row_data(row)
-            formatted_results.append(f"Sample Row {i}: {clean_row}")
-
-        result_text = f"LARGE DATASET ANALYSIS ({len(results)} total records)\n\n"
-        result_text += "SAMPLE DATA:\n" + "\n".join(formatted_results)
-        result_text += f"\n\n[Sample showing first {sample_size} of {len(results)} total records]"
-
-        # Add comprehensive analytics
-        result_text += self._generate_comprehensive_analytics(results)
-        return result_text
-
-    def _clean_row_data(self, row: dict) -> dict:
-        """Clean and format a single row of data."""
-        clean_row = {}
-        for key, value in row.items():
-            if value is not None:
-                # Convert values to strings and limit length for very long values
-                str_value = str(value)
-                if len(str_value) > 200:  # Increased limit for better context
-                    str_value = str_value[:197] + "..."
-                clean_row[key] = str_value
-        return clean_row
-
-    def _generate_summary_stats(self, results: list[dict]) -> str:
-        """Generate summary statistics for large datasets."""
-        if not results:
-            return ""
-
-        stats = [f"\n\nSUMMARY STATISTICS:"]
-        stats.append(f"- Total Records: {len(results)}")
-
-        # Analyze common fields
-        sample_row = results[0]
-        for key in sample_row.keys():
-            if key.lower() in ["status", "department", "location", "type", "category"]:
-                unique_values = set(str(row.get(key, "")) for row in results if row.get(key))
-                if len(unique_values) <= 10:  # Only show if manageable number
-                    stats.append(
-                        f"- {key.title()} Distribution: {len(unique_values)} unique values"
-                    )
-
-        return "\n".join(stats)
-
-    def _generate_comprehensive_analytics(self, results: list[dict]) -> str:
-        """Generate comprehensive analytics for very large datasets."""
-        if not results:
-            return ""
-
-        analytics = [f"\n\nCOMPREHENSIVE ANALYTICS:"]
-        analytics.append(f"- Dataset Size: {len(results)} records")
-
-        # Field analysis
-        sample_row = results[0]
-        analytics.append(f"- Available Fields: {len(sample_row)} columns")
-        analytics.append(
-            f"- Field Names: {', '.join(list(sample_row.keys())[:10])}{'...' if len(sample_row) > 10 else ''}"
-        )
-
-        # Distribution analysis for key fields
-        key_fields = ["status", "department", "location", "type", "category", "priority"]
-        for field in key_fields:
-            if field in sample_row:
-                unique_values = set(str(row.get(field, "")) for row in results if row.get(field))
-                if unique_values and len(unique_values) <= 20:
-                    analytics.append(
-                        f"- {field.title()} Categories: {', '.join(sorted(unique_values))}"
-                    )
-
-        analytics.append("\nRECOMMENDATION: Use more specific filters to get targeted results.")
-        return "\n".join(analytics)
 
     def _format_query_context(self, query_context: dict[str, Any]) -> str:
         """Format query context for prompt inclusion.
