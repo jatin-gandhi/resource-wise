@@ -243,7 +243,7 @@ class ResponseAgent(BaseAgent):
                 "agent_type": "response",
             }
 
-    def _prepare_results_for_llm(self, db_results: list[dict], max_rows: int = 20) -> str:
+    def _prepare_results_for_llm(self, db_results: list[dict], max_rows: int = 50) -> str:
         """Prepare database results for LLM processing.
 
         Args:

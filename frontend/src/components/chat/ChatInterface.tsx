@@ -28,7 +28,7 @@ import {
   Delete as DeleteIcon,
   MoreVert as MoreVertIcon,
   Person as PersonIcon,
-  SmartToy as BotIcon,
+  Assistant as BotIcon,
   ContentCopy as CopyIcon,
   ArrowBack as ArrowBackIcon,
 } from '@mui/icons-material';
@@ -49,6 +49,8 @@ import { useStreamingChat } from '../../hooks/useStreamingChat';
 import { useChatPersistence } from '../../hooks/useChatPersistence';
 import { useNavigate } from 'react-router-dom';
 import type { RootState } from '../../store';
+import ThinkingIndicator from './ThinkingIndicator';
+import SimpleTable from './ScrollableTable';
 
 // Import highlight.js CSS for code syntax highlighting
 import 'highlight.js/styles/github-dark.css';
@@ -143,27 +145,35 @@ const InlineCode = ({ children, ...props }: any) => (
 const ChatInterface: React.FC = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const activeConversation = useSelector((state: RootState) =>
-    selectActiveConversation(state)
-  );
-  const conversations = useSelector((state: RootState) =>
-    selectConversations(state)
-  );
-  const isStreaming = useSelector((state: RootState) =>
-    selectIsStreaming(state)
-  );
-  const error = useSelector((state: RootState) => selectChatError(state));
 
-  // Debug: Log when activeConversation changes
-  // useEffect(() => {
-  //   if (activeConversation) {
-  //     console.log('Active conversation updated:', {
-  //       id: activeConversation.id,
-  //       messageCount: activeConversation.messages.length,
-  //       lastMessage: activeConversation.messages[activeConversation.messages.length - 1]?.content?.slice(0, 50) + '...'
-  //     });
-  //   }
-  // }, [activeConversation]);
+  // Add error handling for selectors
+  let activeConversation, conversations, isStreaming, error;
+  try {
+    activeConversation = useSelector((state: RootState) =>
+      selectActiveConversation(state)
+    );
+    conversations = useSelector((state: RootState) =>
+      selectConversations(state)
+    );
+    isStreaming = useSelector((state: RootState) => selectIsStreaming(state));
+    error = useSelector((state: RootState) => selectChatError(state));
+  } catch (selectorError) {
+    console.error('Error in Redux selectors:', selectorError);
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          height: '100vh',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Typography variant="h6" color="error">
+          Error loading chat interface. Please refresh the page.
+        </Typography>
+      </Box>
+    );
+  }
 
   const [message, setMessage] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(true);
@@ -254,6 +264,10 @@ const ChatInterface: React.FC = () => {
   };
 
   const renderMessage = (msg: any) => {
+    if (!msg || !msg.id) {
+      return null;
+    }
+
     return (
       <Box
         key={msg.id}
@@ -280,11 +294,13 @@ const ChatInterface: React.FC = () => {
           sx={{
             width: 36,
             height: 36,
-            bgcolor: msg.role === 'user' ? 'primary.main' : 'secondary.main',
+            bgcolor: msg.role === 'user' ? 'primary.main' : 'primary.dark',
+            color: 'white',
             boxShadow: 2,
             transition: 'transform 0.2s ease-in-out',
             '&:hover': {
               transform: 'scale(1.05)',
+              boxShadow: 3,
             },
           }}
         >
@@ -369,27 +385,42 @@ const ChatInterface: React.FC = () => {
                   borderRadius: '0 6px 6px 0',
                   fontStyle: 'italic',
                 },
-                '& .markdown-content table': {
-                  borderCollapse: 'collapse',
-                  width: '100%',
-                  marginBottom: '1rem',
-                  border: '1px solid',
-                  borderColor: 'grey.300',
-                  borderRadius: '6px',
-                  overflow: 'hidden',
-                },
+
                 '& .markdown-content th': {
-                  backgroundColor: 'primary.50',
-                  fontWeight: 600,
+                  backgroundColor: 'primary.200',
+                  fontWeight: 700,
                   padding: '0.75rem',
                   textAlign: 'left',
-                  borderBottom: '1px solid',
-                  borderColor: 'grey.300',
+                  borderBottom: '2px solid',
+                  borderColor: 'primary.300',
+                  borderRight: '1px solid',
+                  borderRightColor: 'grey.200',
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 101,
+                  boxShadow:
+                    '0 2px 4px rgba(0,0,0,0.1), 0 4px 8px rgba(0,0,0,0.15)',
+                  color: 'primary.dark',
+                  '&:first-of-type': {
+                    borderLeft: 'none',
+                  },
+                  '&:last-of-type': {
+                    borderRight: 'none',
+                  },
                 },
                 '& .markdown-content td': {
                   padding: '0.75rem',
                   borderBottom: '1px solid',
                   borderColor: 'grey.200',
+                  borderRight: '1px solid',
+                  borderRightColor: 'grey.100',
+                  backgroundColor: 'background.paper',
+                  '&:first-of-type': {
+                    borderLeft: 'none',
+                  },
+                  '&:last-of-type': {
+                    borderRight: 'none',
+                  },
                 },
                 '& .markdown-content strong': {
                   fontWeight: 700,
@@ -408,74 +439,32 @@ const ChatInterface: React.FC = () => {
               }}
             >
               <div className="markdown-content">
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  rehypePlugins={[rehypeHighlight]}
-                  components={{
-                    pre: CodeBlock,
-                    code: ({ children, className, ...props }: any) =>
-                      className ? (
-                        <code className={className} {...props}>
-                          {children}
-                        </code>
-                      ) : (
-                        <InlineCode {...props}>{children}</InlineCode>
+                {msg.content ? (
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    rehypePlugins={[rehypeHighlight]}
+                    components={{
+                      pre: CodeBlock,
+                      code: ({ children, className, ...props }: any) =>
+                        className ? (
+                          <code className={className} {...props}>
+                            {children}
+                          </code>
+                        ) : (
+                          <InlineCode {...props}>{children}</InlineCode>
+                        ),
+                      table: ({ children, ...props }: any) => (
+                        <SimpleTable {...props}>{children}</SimpleTable>
                       ),
-                  }}
-                >
-                  {msg.content || '[No content]'}
-                </ReactMarkdown>
-              </div>
-              {msg.isStreaming && (
-                <Box
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    mt: 2,
-                    gap: 1,
-                    p: 1,
-                    backgroundColor: 'primary.50',
-                    borderRadius: 1,
-                    border: '1px solid',
-                    borderColor: 'primary.200',
-                  }}
-                >
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      gap: 0.5,
-                      '& .dot': {
-                        width: 6,
-                        height: 6,
-                        borderRadius: '50%',
-                        backgroundColor: 'primary.main',
-                        animation: 'pulse 1.4s ease-in-out infinite both',
-                      },
-                      '& .dot:nth-of-type(1)': { animationDelay: '-0.32s' },
-                      '& .dot:nth-of-type(2)': { animationDelay: '-0.16s' },
-                      '@keyframes pulse': {
-                        '0%, 80%, 100%': {
-                          transform: 'scale(0)',
-                        },
-                        '40%': {
-                          transform: 'scale(1)',
-                        },
-                      },
                     }}
                   >
-                    <div className="dot" />
-                    <div className="dot" />
-                    <div className="dot" />
-                  </Box>
-                  <Typography
-                    variant="caption"
-                    color="primary.main"
-                    fontWeight={500}
-                  >
-                    AI is thinking...
-                  </Typography>
-                </Box>
-              )}
+                    {msg.content}
+                  </ReactMarkdown>
+                ) : !msg.isStreaming ? (
+                  <ThinkingIndicator />
+                ) : null}
+              </div>
+              {msg.isStreaming && <ThinkingIndicator sx={{ mt: 2 }} />}
             </Paper>
           ) : (
             <Paper
@@ -493,16 +482,20 @@ const ChatInterface: React.FC = () => {
                 },
               }}
             >
-              <Typography
-                variant="body1"
-                sx={{
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-word',
-                  lineHeight: 1.6,
-                }}
-              >
-                {msg.content || '[No content]'}
-              </Typography>
+              {msg.content ? (
+                <Typography
+                  variant="body1"
+                  sx={{
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    lineHeight: 1.6,
+                  }}
+                >
+                  {msg.content}
+                </Typography>
+              ) : !msg.isStreaming ? (
+                <ThinkingIndicator />
+              ) : null}
             </Paper>
           )}
         </Box>
@@ -651,7 +644,7 @@ const ChatInterface: React.FC = () => {
               fontSize: '0.7rem',
             }}
           >
-            Powered by AI • v1.0
+            Powered by ResourceWiseAI • v1.0
           </Typography>
         </Box>
       </Drawer>
@@ -719,6 +712,12 @@ const ChatInterface: React.FC = () => {
             overflow: 'auto',
             py: 2,
             backgroundColor: 'background.default',
+            // Hide scrollbar while keeping scroll functionality
+            '&::-webkit-scrollbar': {
+              display: 'none',
+            },
+            scrollbarWidth: 'none', // Firefox
+            msOverflowStyle: 'none', // IE and Edge
           }}
         >
           {error && (
@@ -727,7 +726,7 @@ const ChatInterface: React.FC = () => {
             </Alert>
           )}
 
-          {activeConversation?.messages.length === 0 ? (
+          {!activeConversation ? (
             <Box
               sx={{
                 display: 'flex',
@@ -739,7 +738,27 @@ const ChatInterface: React.FC = () => {
                 px: 4,
               }}
             >
-              <BotIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+              <BotIcon sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
+              <Typography variant="h5" gutterBottom>
+                Loading ResourceWise AI...
+              </Typography>
+              <Typography variant="body1" color="text.secondary">
+                Setting up your conversation
+              </Typography>
+            </Box>
+          ) : activeConversation.messages.length === 0 ? (
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+                textAlign: 'center',
+                px: 4,
+              }}
+            >
+              <BotIcon sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
               <Typography variant="h5" gutterBottom>
                 Welcome to ResourceWise AI
               </Typography>
@@ -750,7 +769,7 @@ const ChatInterface: React.FC = () => {
             </Box>
           ) : (
             <>
-              {activeConversation?.messages.map(renderMessage)}
+              {activeConversation.messages.map(renderMessage)}
               <div ref={messagesEndRef} />
             </>
           )}
@@ -767,7 +786,14 @@ const ChatInterface: React.FC = () => {
             backgroundColor: 'background.paper',
           }}
         >
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-end' }}>
+          <Box
+            sx={{
+              display: 'flex',
+              gap: 2,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
             <TextField
               fullWidth
               multiline
@@ -831,44 +857,6 @@ const ChatInterface: React.FC = () => {
                 <SendIcon />
               )}
             </IconButton>
-          </Box>
-
-          {/* Helpful hints */}
-          <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            <Chip
-              label="💡 Try: 'How to allocate resources efficiently?'"
-              size="small"
-              variant="outlined"
-              onClick={() =>
-                setMessage('How to allocate resources efficiently?')
-              }
-              sx={{
-                cursor: 'pointer',
-                '&:hover': { backgroundColor: 'primary.50' },
-              }}
-            />
-            <Chip
-              label="📊 Try: 'Show me project management best practices'"
-              size="small"
-              variant="outlined"
-              onClick={() =>
-                setMessage('Show me project management best practices')
-              }
-              sx={{
-                cursor: 'pointer',
-                '&:hover': { backgroundColor: 'primary.50' },
-              }}
-            />
-            <Chip
-              label="🚀 Try: 'Help me optimize team productivity'"
-              size="small"
-              variant="outlined"
-              onClick={() => setMessage('Help me optimize team productivity')}
-              sx={{
-                cursor: 'pointer',
-                '&:hover': { backgroundColor: 'primary.50' },
-              }}
-            />
           </Box>
         </Paper>
       </Box>
