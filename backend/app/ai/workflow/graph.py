@@ -28,7 +28,8 @@ class AgentWorkflow:
         self.query_agent = QueryAgent(config)
         self.response_agent = ResponseAgent(config)
         self.graph = self._create_graph()
-        # logger.info("Initializing AgentWorkflow with Intent, Query, and Response Agents")
+        self.compiled_graph = self.graph.compile()
+        logger.info("Initializing AgentWorkflow with Intent, Query, and Response Agents")
 
     def _create_graph(self) -> StateGraph:
         """Create the LangGraph workflow.
@@ -380,9 +381,8 @@ class AgentWorkflow:
             state_dict = initial_state.to_dict()
             logger.debug("Initialized state", state=initial_state.dict())
 
-            # Compile and run workflow
-            compiled_graph = self.graph.compile()
-            raw_final_state = await compiled_graph.ainvoke(state_dict)
+            # Use pre-compiled graph for optimal performance
+            raw_final_state = await self.compiled_graph.ainvoke(state_dict)
 
             # Convert LangGraph AddableValuesDict back to AgentState
             final_state = AgentState(
@@ -431,43 +431,3 @@ class AgentWorkflow:
             )
 
             return error_state
-
-    async def stream_process(
-        self, user_input: str, session_id: str, context: dict[str, Any]
-    ) -> Any:
-        """Process a user query through the workflow with streaming.
-
-        Args:
-            user_input: User's input query
-            session_id: Session identifier
-            context: Conversation context
-
-        Yields:
-            Streaming response chunks
-        """
-        try:
-            logger.info("Starting streaming workflow", user_input=user_input, session_id=session_id)
-
-            # For now, process normally and yield the final result
-            # TODO: Implement proper streaming when LangGraph supports it better
-            final_state = await self.process(user_input, session_id, context)
-
-            if final_state.query_result:
-                response = final_state.query_result.get("response", "")
-                # Stream the response in chunks
-                chunk_size = 50
-                for i in range(0, len(response), chunk_size):
-                    chunk = response[i : i + chunk_size]
-                    yield chunk
-
-        except Exception as e:
-            logger.error(
-                "Error in streaming workflow",
-                error=str(e),
-                error_type=type(e).__name__,
-                user_input=user_input,
-                session_id=session_id,
-                context=context,
-                exc_info=True,
-            )
-            yield f"Error: {str(e)}"
