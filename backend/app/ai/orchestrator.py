@@ -90,17 +90,17 @@ class AIOrchestrator:
             # Send workflow metadata
             yield f"data: {json.dumps({'type': 'metadata', 'data': {'intent': query_result.get('intent', 'unknown'), 'requires_database': query_result.get('requires_database', False), 'sql_query': query_result.get('sql_query'), 'tables_used': query_result.get('tables_used', [])}})}\n\n"
 
-            # Stream the response content in chunks
-            chunk_size = 20  # Smaller chunks for better streaming experience
+            # Stream the response content in chunks optimized for micro-smooth scrolling
+            chunk_size = 40  # Optimal chunk size for smooth flowing effect
             for i in range(0, len(response_content), chunk_size):
                 chunk = response_content[i : i + chunk_size]
                 accumulated_content += chunk
                 yield f"data: {json.dumps({'type': 'token', 'data': {'token': chunk, 'content': accumulated_content}})}\n\n"
 
-                # Small delay to simulate streaming
+                # Timing optimized for 250ms smooth scroll cycles
                 import asyncio
 
-                await asyncio.sleep(0.05)
+                await asyncio.sleep(0.06)  # Perfect timing for micro-smooth scrolling
 
             # Send completion event with full metadata
             completion_data = {

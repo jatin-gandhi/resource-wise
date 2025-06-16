@@ -28,21 +28,23 @@ const ThinkingIndicator: React.FC<ThinkingIndicatorProps> = ({
         sx={{
           display: 'flex',
           gap: 0.5,
+          alignItems: 'center',
           '& .dot': {
-            width: 6,
-            height: 6,
+            width: 5,
+            height: 5,
             borderRadius: '50%',
             backgroundColor: 'primary.main',
-            animation: 'pulse 1.4s ease-in-out infinite both',
+            animation: 'bounce 1.4s ease-in-out infinite',
           },
-          '& .dot:nth-of-type(1)': { animationDelay: '-0.32s' },
-          '& .dot:nth-of-type(2)': { animationDelay: '-0.16s' },
-          '@keyframes pulse': {
-            '0%, 80%, 100%': {
-              transform: 'scale(0)',
+          '& .dot:nth-of-type(1)': { animationDelay: '0s' },
+          '& .dot:nth-of-type(2)': { animationDelay: '0.2s' },
+          '& .dot:nth-of-type(3)': { animationDelay: '0.4s' },
+          '@keyframes bounce': {
+            '0%, 60%, 100%': {
+              transform: 'translateY(0)',
             },
-            '40%': {
-              transform: 'scale(1)',
+            '30%': {
+              transform: 'translateY(-8px)',
             },
           },
         }}

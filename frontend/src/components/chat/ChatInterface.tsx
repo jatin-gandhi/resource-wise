@@ -30,7 +30,8 @@ import {
   Person as PersonIcon,
   Assistant as BotIcon,
   ContentCopy as CopyIcon,
-  ArrowBack as ArrowBackIcon,
+  Home as HomeIcon,
+  KeyboardArrowDown as ScrollDownIcon,
 } from '@mui/icons-material';
 import { useSelector, useDispatch } from 'react-redux';
 import ReactMarkdown from 'react-markdown';
@@ -51,6 +52,7 @@ import { useNavigate } from 'react-router-dom';
 import type { RootState } from '../../store';
 import ThinkingIndicator from './ThinkingIndicator';
 import SimpleTable from './ScrollableTable';
+import HelperChips from './HelperChips';
 
 // Import highlight.js CSS for code syntax highlighting
 import 'highlight.js/styles/github-dark.css';
@@ -181,15 +183,141 @@ const ChatInterface: React.FC = () => {
   const [selectedConversationId, setSelectedConversationId] = useState<
     string | null
   >(null);
+  const [isUserAtBottom, setIsUserAtBottom] = useState(true);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [aiMessageAtTop, setAiMessageAtTop] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastAiMessageRef = useRef<HTMLDivElement>(null);
+  const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { sendMessage } = useStreamingChat();
   useChatPersistence();
 
-  // Auto-scroll to bottom when new messages arrive
+  // ChatGPT-style scrolling logic
+  const scrollToBottom = (force = false) => {
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
+    }
+
+    scrollTimeoutRef.current = setTimeout(() => {
+      if (messagesEndRef.current && (isUserAtBottom || force)) {
+        messagesEndRef.current.scrollIntoView({
+          behavior: force ? 'smooth' : 'instant',
+          block: 'nearest',
+        });
+      }
+    }, 10);
+  };
+
+  // Check if AI message has reached the top of viewport
+  const checkAiMessagePosition = () => {
+    if (lastAiMessageRef.current && messagesContainerRef.current) {
+      const messageRect = lastAiMessageRef.current.getBoundingClientRect();
+      const containerRect =
+        messagesContainerRef.current.getBoundingClientRect();
+
+      // Check if AI message top is at or above the container top
+      const messageAtTop = messageRect.top <= containerRect.top + 100; // 100px buffer
+      setAiMessageAtTop(messageAtTop);
+
+      // Show scroll button if AI message is at top and we're streaming
+      setShowScrollButton(messageAtTop && isStreaming);
+    }
+  };
+
+  // ChatGPT-style scroll behavior during streaming
+  const handleStreamingScroll = () => {
+    if (!isStreaming || aiMessageAtTop) return;
+
+    // Continue scrolling until AI message reaches top
+    if (lastAiMessageRef.current && messagesContainerRef.current) {
+      const messageRect = lastAiMessageRef.current.getBoundingClientRect();
+      const containerRect =
+        messagesContainerRef.current.getBoundingClientRect();
+
+      if (messageRect.top > containerRect.top + 100) {
+        // AI message hasn't reached top yet, continue scrolling
+        scrollToBottom(false);
+      }
+    }
+  };
+
+  // Track scroll position and AI message position
+  const handleScroll = () => {
+    if (messagesContainerRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } =
+        messagesContainerRef.current;
+      const threshold = 100; // pixels from bottom
+      const isAtBottom = scrollHeight - scrollTop - clientHeight <= threshold;
+      setIsUserAtBottom(isAtBottom);
+
+      // Check AI message position during streaming
+      if (isStreaming) {
+        checkAiMessagePosition();
+      }
+    }
+  };
+
+  // Throttle scroll handler to improve performance
+  const throttledHandleScroll = useRef<() => void>();
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [activeConversation?.messages]);
+    let timeoutId: NodeJS.Timeout;
+    throttledHandleScroll.current = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(handleScroll, 100);
+    };
+    return () => clearTimeout(timeoutId);
+  }, []);
+
+  // ChatGPT-style auto-scroll logic
+  useEffect(() => {
+    if (isStreaming) {
+      handleStreamingScroll();
+      checkAiMessagePosition();
+    } else if (isUserAtBottom) {
+      scrollToBottom(false);
+    }
+  }, [activeConversation?.messages, isStreaming, isUserAtBottom]);
+
+  // Force scroll to bottom when user sends a message
+  useEffect(() => {
+    if (
+      activeConversation?.messages &&
+      activeConversation.messages.length > 0
+    ) {
+      const lastMessage =
+        activeConversation.messages[activeConversation.messages.length - 1];
+      if (lastMessage?.role === 'user') {
+        setIsUserAtBottom(true);
+        setAiMessageAtTop(false);
+        setShowScrollButton(false);
+        scrollToBottom(true);
+      }
+    }
+  }, [activeConversation?.messages?.length, activeConversation]);
+
+  // Reset AI message position when streaming stops
+  useEffect(() => {
+    if (!isStreaming) {
+      setAiMessageAtTop(false);
+      setShowScrollButton(false);
+    }
+  }, [isStreaming]);
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Create initial conversation if none exists
   useEffect(() => {
@@ -219,6 +347,12 @@ const ChatInterface: React.FC = () => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
+    }
+  };
+
+  const handleHelperChipClick = (chipText: string) => {
+    if (!isStreaming) {
+      setMessage(chipText);
     }
   };
 
@@ -263,21 +397,51 @@ const ChatInterface: React.FC = () => {
     return timestampDate.toLocaleDateString();
   };
 
-  const renderMessage = (msg: any) => {
+  const renderMessage = (msg: any, index: number, messages: any[]) => {
     if (!msg || !msg.id) {
       return null;
     }
 
+    // Check if this is the last AI message
+    const isLastAiMessage =
+      msg.role === 'assistant' && index === messages.length - 1;
+
+    // Copy message content function
+    const handleCopyMessage = async () => {
+      try {
+        await navigator.clipboard.writeText(msg.content || '');
+        setCopiedMessageId(msg.id);
+
+        // Clear the copied state after 2 seconds
+        if (copyTimeoutRef.current) {
+          clearTimeout(copyTimeoutRef.current);
+        }
+        copyTimeoutRef.current = setTimeout(() => {
+          setCopiedMessageId(null);
+        }, 2000);
+      } catch (err) {
+        console.error('Failed to copy message: ', err);
+      }
+    };
+
+    const isCopied = copiedMessageId === msg.id;
+
     return (
       <Box
         key={msg.id}
+        ref={isLastAiMessage ? lastAiMessageRef : undefined}
         sx={{
           display: 'flex',
           alignItems: 'flex-start',
           gap: 2,
           mb: 3,
           px: 2,
+          position: 'relative',
           animation: 'fadeInUp 0.3s ease-out',
+          '&:hover .copy-button': {
+            opacity: 1,
+            transform: 'translateY(0)',
+          },
           '@keyframes fadeInUp': {
             '0%': {
               opacity: 0,
@@ -499,6 +663,47 @@ const ChatInterface: React.FC = () => {
             </Paper>
           )}
         </Box>
+
+        {/* Copy button - appears on hover */}
+        <Tooltip title={isCopied ? 'Copied!' : 'Copy message'}>
+          <IconButton
+            className="copy-button"
+            size="small"
+            onClick={handleCopyMessage}
+            sx={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              opacity: 0,
+              transform: 'translateY(10px)',
+              transition: 'all 0.2s ease-in-out',
+              backgroundColor: isCopied ? 'success.main' : 'background.paper',
+              color: isCopied ? 'white' : 'text.secondary',
+              border: '1px solid',
+              borderColor: isCopied ? 'success.main' : 'grey.300',
+              boxShadow: 1,
+              '&:hover': {
+                backgroundColor: isCopied ? 'success.dark' : 'primary.main',
+                color: 'white',
+                borderColor: isCopied ? 'success.dark' : 'primary.main',
+                boxShadow: 2,
+              },
+            }}
+          >
+            {isCopied ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Typography
+                  variant="caption"
+                  sx={{ fontSize: '0.7rem', fontWeight: 600 }}
+                >
+                  ✓
+                </Typography>
+              </Box>
+            ) : (
+              <CopyIcon fontSize="small" />
+            )}
+          </IconButton>
+        </Tooltip>
       </Box>
     );
   };
@@ -662,51 +867,141 @@ const ChatInterface: React.FC = () => {
         {/* Header */}
         <AppBar
           position="static"
-          elevation={1}
+          elevation={2}
           sx={{
-            background: 'linear-gradient(90deg, #130738 0%, #000000 100%)',
+            background:
+              'linear-gradient(135deg, #130738 0%, #1a0a4a 50%, #000000 100%)',
             color: 'white',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
           }}
         >
-          <Toolbar>
+          <Toolbar sx={{ minHeight: '64px !important', px: 2 }}>
+            {/* Left side - Menu button */}
             <IconButton
               edge="start"
               onClick={() => setDrawerOpen(!drawerOpen)}
-              sx={{ mr: 2, color: 'white' }}
-            >
-              <MenuIcon />
-            </IconButton>
-            <IconButton
-              onClick={() => navigate('/')}
               sx={{
                 mr: 2,
                 color: 'white',
                 '&:hover': {
                   backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                  transform: 'scale(1.05)',
                 },
+                transition: 'all 0.2s ease-in-out',
               }}
             >
-              <ArrowBackIcon />
+              <MenuIcon />
             </IconButton>
-            <Typography variant="h6" sx={{ flex: 1, color: 'white' }}>
-              {activeConversation?.title || 'ResourceWise AI'}
-            </Typography>
-            {isStreaming && (
-              <Chip
-                label="Thinking..."
-                size="small"
+
+            {/* Center - Title and Status */}
+            <Box
+              sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 2 }}
+            >
+              <Typography
+                variant="h6"
                 sx={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
                   color: 'white',
+                  fontWeight: 600,
+                  background:
+                    'linear-gradient(45deg, #ffffff 30%, #e0e7ff 90%)',
+                  backgroundClip: 'text',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
                 }}
-                icon={<CircularProgress size={16} sx={{ color: 'white' }} />}
-              />
-            )}
+              >
+                {activeConversation?.title || 'ResourceWise AI'}
+              </Typography>
+
+              {isStreaming && (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    borderRadius: 3,
+                    px: 1.5,
+                    py: 0.5,
+                    backdropFilter: 'blur(10px)',
+                  }}
+                >
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      gap: 0.3,
+                      alignItems: 'center',
+                      '& .dot': {
+                        width: 4,
+                        height: 4,
+                        borderRadius: '50%',
+                        backgroundColor: 'white',
+                        animation: 'bounce 1.4s ease-in-out infinite',
+                      },
+                      '& .dot:nth-of-type(1)': { animationDelay: '0s' },
+                      '& .dot:nth-of-type(2)': { animationDelay: '0.2s' },
+                      '& .dot:nth-of-type(3)': { animationDelay: '0.4s' },
+                      '@keyframes bounce': {
+                        '0%, 60%, 100%': {
+                          transform: 'translateY(0)',
+                        },
+                        '30%': {
+                          transform: 'translateY(-3px)',
+                        },
+                      },
+                    }}
+                  >
+                    <div className="dot" />
+                    <div className="dot" />
+                    <div className="dot" />
+                  </Box>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: 'white',
+                      fontWeight: 500,
+                      fontSize: '0.75rem',
+                    }}
+                  >
+                    AI Thinking...
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+
+            {/* Right side - Home button */}
+            <IconButton
+              onClick={() => navigate('/')}
+              sx={{
+                color: 'white',
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                borderRadius: 2,
+                px: 2,
+                py: 1,
+                '&:hover': {
+                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                  transform: 'translateY(-1px)',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                },
+                transition: 'all 0.2s ease-in-out',
+              }}
+            >
+              <HomeIcon sx={{ mr: 0.5, fontSize: 20 }} />
+              <Typography
+                variant="caption"
+                sx={{ fontWeight: 500, fontSize: '0.75rem' }}
+              >
+                Home
+              </Typography>
+            </IconButton>
           </Toolbar>
         </AppBar>
 
         {/* Messages Area */}
         <Box
+          ref={messagesContainerRef}
+          onScroll={() => throttledHandleScroll.current?.()}
           sx={{
             flex: 1,
             overflow: 'auto',
@@ -769,17 +1064,57 @@ const ChatInterface: React.FC = () => {
             </Box>
           ) : (
             <>
-              {activeConversation.messages.map(renderMessage)}
+              {activeConversation.messages.map((msg, index) =>
+                renderMessage(msg, index, activeConversation.messages)
+              )}
               <div ref={messagesEndRef} />
             </>
           )}
         </Box>
 
+        {/* ChatGPT-style Scroll to Bottom Button */}
+        {showScrollButton && (
+          <Box
+            sx={{
+              position: 'relative',
+              display: 'flex',
+              justifyContent: 'center',
+              py: 1,
+            }}
+          >
+            <IconButton
+              onClick={() => {
+                setIsUserAtBottom(true);
+                setAiMessageAtTop(false);
+                setShowScrollButton(false);
+                scrollToBottom(true); // Force smooth scroll to bottom
+              }}
+              sx={{
+                backgroundColor: 'primary.main',
+                color: 'white',
+                boxShadow: 2,
+                '&:hover': {
+                  backgroundColor: 'primary.dark',
+                  boxShadow: 3,
+                },
+                animation: 'pulse 2s infinite',
+                '@keyframes pulse': {
+                  '0%': { boxShadow: '0 0 0 0 rgba(25, 118, 210, 0.7)' },
+                  '70%': { boxShadow: '0 0 0 10px rgba(25, 118, 210, 0)' },
+                  '100%': { boxShadow: '0 0 0 0 rgba(25, 118, 210, 0)' },
+                },
+              }}
+            >
+              <ScrollDownIcon />
+            </IconButton>
+          </Box>
+        )}
+
         {/* Enhanced Input Area */}
         <Paper
           elevation={4}
           sx={{
-            p: 3,
+            p: 1.5,
             borderRadius: 0,
             borderTop: '1px solid',
             borderColor: 'divider',
@@ -858,6 +1193,24 @@ const ChatInterface: React.FC = () => {
               )}
             </IconButton>
           </Box>
+
+          {/* Divider */}
+          <Box
+            sx={{
+              width: '100%',
+              height: '1px',
+              backgroundColor: 'divider',
+              mt: 1,
+              mb: 0.5,
+              opacity: 0.3,
+            }}
+          />
+
+          {/* Helper Chips */}
+          <HelperChips
+            onChipClick={handleHelperChipClick}
+            disabled={isStreaming}
+          />
         </Paper>
       </Box>
 
