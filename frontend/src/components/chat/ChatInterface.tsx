@@ -30,7 +30,7 @@ import {
   Person as PersonIcon,
   Assistant as BotIcon,
   ContentCopy as CopyIcon,
-  ArrowBack as ArrowBackIcon,
+  Home as HomeIcon,
   KeyboardArrowDown as ScrollDownIcon,
 } from '@mui/icons-material';
 import { useSelector, useDispatch } from 'react-redux';
@@ -185,11 +185,13 @@ const ChatInterface: React.FC = () => {
   const [isUserAtBottom, setIsUserAtBottom] = useState(true);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [aiMessageAtTop, setAiMessageAtTop] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastAiMessageRef = useRef<HTMLDivElement>(null);
+  const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { sendMessage } = useStreamingChat();
   useChatPersistence();
 
@@ -304,11 +306,14 @@ const ChatInterface: React.FC = () => {
     }
   }, [isStreaming]);
 
-  // Cleanup timeout on unmount
+  // Cleanup timeouts on unmount
   useEffect(() => {
     return () => {
       if (scrollTimeoutRef.current) {
         clearTimeout(scrollTimeoutRef.current);
+      }
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
       }
     };
   }, []);
@@ -394,6 +399,26 @@ const ChatInterface: React.FC = () => {
     const isLastAiMessage =
       msg.role === 'assistant' && index === messages.length - 1;
 
+    // Copy message content function
+    const handleCopyMessage = async () => {
+      try {
+        await navigator.clipboard.writeText(msg.content || '');
+        setCopiedMessageId(msg.id);
+
+        // Clear the copied state after 2 seconds
+        if (copyTimeoutRef.current) {
+          clearTimeout(copyTimeoutRef.current);
+        }
+        copyTimeoutRef.current = setTimeout(() => {
+          setCopiedMessageId(null);
+        }, 2000);
+      } catch (err) {
+        console.error('Failed to copy message: ', err);
+      }
+    };
+
+    const isCopied = copiedMessageId === msg.id;
+
     return (
       <Box
         key={msg.id}
@@ -404,7 +429,12 @@ const ChatInterface: React.FC = () => {
           gap: 2,
           mb: 3,
           px: 2,
+          position: 'relative',
           animation: 'fadeInUp 0.3s ease-out',
+          '&:hover .copy-button': {
+            opacity: 1,
+            transform: 'translateY(0)',
+          },
           '@keyframes fadeInUp': {
             '0%': {
               opacity: 0,
@@ -626,6 +656,47 @@ const ChatInterface: React.FC = () => {
             </Paper>
           )}
         </Box>
+
+        {/* Copy button - appears on hover */}
+        <Tooltip title={isCopied ? 'Copied!' : 'Copy message'}>
+          <IconButton
+            className="copy-button"
+            size="small"
+            onClick={handleCopyMessage}
+            sx={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              opacity: 0,
+              transform: 'translateY(10px)',
+              transition: 'all 0.2s ease-in-out',
+              backgroundColor: isCopied ? 'success.main' : 'background.paper',
+              color: isCopied ? 'white' : 'text.secondary',
+              border: '1px solid',
+              borderColor: isCopied ? 'success.main' : 'grey.300',
+              boxShadow: 1,
+              '&:hover': {
+                backgroundColor: isCopied ? 'success.dark' : 'primary.main',
+                color: 'white',
+                borderColor: isCopied ? 'success.dark' : 'primary.main',
+                boxShadow: 2,
+              },
+            }}
+          >
+            {isCopied ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Typography
+                  variant="caption"
+                  sx={{ fontSize: '0.7rem', fontWeight: 600 }}
+                >
+                  ✓
+                </Typography>
+              </Box>
+            ) : (
+              <CopyIcon fontSize="small" />
+            )}
+          </IconButton>
+        </Tooltip>
       </Box>
     );
   };
@@ -789,46 +860,134 @@ const ChatInterface: React.FC = () => {
         {/* Header */}
         <AppBar
           position="static"
-          elevation={1}
+          elevation={2}
           sx={{
-            background: 'linear-gradient(90deg, #130738 0%, #000000 100%)',
+            background:
+              'linear-gradient(135deg, #130738 0%, #1a0a4a 50%, #000000 100%)',
             color: 'white',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
           }}
         >
-          <Toolbar>
+          <Toolbar sx={{ minHeight: '64px !important', px: 2 }}>
+            {/* Left side - Menu button */}
             <IconButton
               edge="start"
               onClick={() => setDrawerOpen(!drawerOpen)}
-              sx={{ mr: 2, color: 'white' }}
-            >
-              <MenuIcon />
-            </IconButton>
-            <IconButton
-              onClick={() => navigate('/')}
               sx={{
                 mr: 2,
                 color: 'white',
                 '&:hover': {
                   backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                  transform: 'scale(1.05)',
                 },
+                transition: 'all 0.2s ease-in-out',
               }}
             >
-              <ArrowBackIcon />
+              <MenuIcon />
             </IconButton>
-            <Typography variant="h6" sx={{ flex: 1, color: 'white' }}>
-              {activeConversation?.title || 'ResourceWise AI'}
-            </Typography>
-            {isStreaming && (
-              <Chip
-                label="Thinking..."
-                size="small"
+
+            {/* Center - Title and Status */}
+            <Box
+              sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 2 }}
+            >
+              <Typography
+                variant="h6"
                 sx={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
                   color: 'white',
+                  fontWeight: 600,
+                  background:
+                    'linear-gradient(45deg, #ffffff 30%, #e0e7ff 90%)',
+                  backgroundClip: 'text',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
                 }}
-                icon={<CircularProgress size={16} sx={{ color: 'white' }} />}
-              />
-            )}
+              >
+                {activeConversation?.title || 'ResourceWise AI'}
+              </Typography>
+
+              {isStreaming && (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    borderRadius: 3,
+                    px: 1.5,
+                    py: 0.5,
+                    backdropFilter: 'blur(10px)',
+                  }}
+                >
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      gap: 0.3,
+                      alignItems: 'center',
+                      '& .dot': {
+                        width: 4,
+                        height: 4,
+                        borderRadius: '50%',
+                        backgroundColor: 'white',
+                        animation: 'bounce 1.4s ease-in-out infinite',
+                      },
+                      '& .dot:nth-of-type(1)': { animationDelay: '0s' },
+                      '& .dot:nth-of-type(2)': { animationDelay: '0.2s' },
+                      '& .dot:nth-of-type(3)': { animationDelay: '0.4s' },
+                      '@keyframes bounce': {
+                        '0%, 60%, 100%': {
+                          transform: 'translateY(0)',
+                        },
+                        '30%': {
+                          transform: 'translateY(-3px)',
+                        },
+                      },
+                    }}
+                  >
+                    <div className="dot" />
+                    <div className="dot" />
+                    <div className="dot" />
+                  </Box>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: 'white',
+                      fontWeight: 500,
+                      fontSize: '0.75rem',
+                    }}
+                  >
+                    AI Thinking...
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+
+            {/* Right side - Home button */}
+            <IconButton
+              onClick={() => navigate('/')}
+              sx={{
+                color: 'white',
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                borderRadius: 2,
+                px: 2,
+                py: 1,
+                '&:hover': {
+                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                  transform: 'translateY(-1px)',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                },
+                transition: 'all 0.2s ease-in-out',
+              }}
+            >
+              <HomeIcon sx={{ mr: 0.5, fontSize: 20 }} />
+              <Typography
+                variant="caption"
+                sx={{ fontWeight: 500, fontSize: '0.75rem' }}
+              >
+                Home
+              </Typography>
+            </IconButton>
           </Toolbar>
         </AppBar>
 
