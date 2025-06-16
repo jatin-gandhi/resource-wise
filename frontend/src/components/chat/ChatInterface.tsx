@@ -52,6 +52,7 @@ import { useNavigate } from 'react-router-dom';
 import type { RootState } from '../../store';
 import ThinkingIndicator from './ThinkingIndicator';
 import SimpleTable from './ScrollableTable';
+import HelperChips from './HelperChips';
 
 // Import highlight.js CSS for code syntax highlighting
 import 'highlight.js/styles/github-dark.css';
@@ -346,6 +347,12 @@ const ChatInterface: React.FC = () => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
+    }
+  };
+
+  const handleHelperChipClick = (chipText: string) => {
+    if (!isStreaming) {
+      setMessage(chipText);
     }
   };
 
@@ -1107,7 +1114,7 @@ const ChatInterface: React.FC = () => {
         <Paper
           elevation={4}
           sx={{
-            p: 3,
+            p: 1.5,
             borderRadius: 0,
             borderTop: '1px solid',
             borderColor: 'divider',
@@ -1186,6 +1193,24 @@ const ChatInterface: React.FC = () => {
               )}
             </IconButton>
           </Box>
+
+          {/* Divider */}
+          <Box
+            sx={{
+              width: '100%',
+              height: '1px',
+              backgroundColor: 'divider',
+              mt: 1,
+              mb: 0.5,
+              opacity: 0.3,
+            }}
+          />
+
+          {/* Helper Chips */}
+          <HelperChips
+            onChipClick={handleHelperChipClick}
+            disabled={isStreaming}
+          />
         </Paper>
       </Box>
 
