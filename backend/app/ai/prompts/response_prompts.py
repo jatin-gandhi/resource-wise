@@ -81,9 +81,10 @@ Analyze the database results to identify the data pattern:
 - LARGE SET (21-50 records) - Show all records with the data required by the user in a tabular format with good markdown formatting.
 - VERY LARGE SET (50+ records) - Show top 50 records with the data required by the user in a tabular format with good markdown formatting. Include details like total number of records, average stats(if applicable), etc. Ask user if they want to see more records.
 
-**For VISUAL REQUEST**
-- WHEN YOU HAVE DATA FOR VISUALIZATION, ALWAYS provide the data with a chart or graph markdown format based on the user's query.
-- Also provide analytics and insights based on the data.
+**For DATA VISUALIZATION REQUEST**
+When the user requests for some type of visualization (graph, chart, etc.):
+- Always output a clean, markdown-compatible data which matches the user's request which can be rendered directly in a UI.
+- Also provide 2–3 insights or analytics summaries based on the data (e.g., trends, outliers, ratios) which might be helpful for the user.
 
 🧠 **STEP 3: ADD BUSINESS INTELLIGENCE**
 
@@ -192,7 +193,7 @@ Your task is to analyze resource matching results and provide focused, actionabl
 - Provide a breakdown of matched resources by role/designation. 
 - Show available capacity and key skills for each resource
 - Use bullet points with names in bold 
--- [Name]: [Avalability] | List of all skills. Highlight the matched skills in bold.
+-- [Name]: [Avalability] | List of all the skills employee has along with the matched skills in bold.
 
 ## 2. Suggested Team Combinations
 For each team combination, present:

@@ -31,6 +31,7 @@ import {
   Assistant as BotIcon,
   ContentCopy as CopyIcon,
   ArrowBack as ArrowBackIcon,
+  KeyboardArrowDown as ScrollDownIcon,
 } from '@mui/icons-material';
 import { useSelector, useDispatch } from 'react-redux';
 import ReactMarkdown from 'react-markdown';
@@ -181,15 +182,136 @@ const ChatInterface: React.FC = () => {
   const [selectedConversationId, setSelectedConversationId] = useState<
     string | null
   >(null);
+  const [isUserAtBottom, setIsUserAtBottom] = useState(true);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [aiMessageAtTop, setAiMessageAtTop] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastAiMessageRef = useRef<HTMLDivElement>(null);
   const { sendMessage } = useStreamingChat();
   useChatPersistence();
 
-  // Auto-scroll to bottom when new messages arrive
+  // ChatGPT-style scrolling logic
+  const scrollToBottom = (force = false) => {
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
+    }
+
+    scrollTimeoutRef.current = setTimeout(() => {
+      if (messagesEndRef.current && (isUserAtBottom || force)) {
+        messagesEndRef.current.scrollIntoView({
+          behavior: force ? 'smooth' : 'instant',
+          block: 'nearest',
+        });
+      }
+    }, 10);
+  };
+
+  // Check if AI message has reached the top of viewport
+  const checkAiMessagePosition = () => {
+    if (lastAiMessageRef.current && messagesContainerRef.current) {
+      const messageRect = lastAiMessageRef.current.getBoundingClientRect();
+      const containerRect =
+        messagesContainerRef.current.getBoundingClientRect();
+
+      // Check if AI message top is at or above the container top
+      const messageAtTop = messageRect.top <= containerRect.top + 100; // 100px buffer
+      setAiMessageAtTop(messageAtTop);
+
+      // Show scroll button if AI message is at top and we're streaming
+      setShowScrollButton(messageAtTop && isStreaming);
+    }
+  };
+
+  // ChatGPT-style scroll behavior during streaming
+  const handleStreamingScroll = () => {
+    if (!isStreaming || aiMessageAtTop) return;
+
+    // Continue scrolling until AI message reaches top
+    if (lastAiMessageRef.current && messagesContainerRef.current) {
+      const messageRect = lastAiMessageRef.current.getBoundingClientRect();
+      const containerRect =
+        messagesContainerRef.current.getBoundingClientRect();
+
+      if (messageRect.top > containerRect.top + 100) {
+        // AI message hasn't reached top yet, continue scrolling
+        scrollToBottom(false);
+      }
+    }
+  };
+
+  // Track scroll position and AI message position
+  const handleScroll = () => {
+    if (messagesContainerRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } =
+        messagesContainerRef.current;
+      const threshold = 100; // pixels from bottom
+      const isAtBottom = scrollHeight - scrollTop - clientHeight <= threshold;
+      setIsUserAtBottom(isAtBottom);
+
+      // Check AI message position during streaming
+      if (isStreaming) {
+        checkAiMessagePosition();
+      }
+    }
+  };
+
+  // Throttle scroll handler to improve performance
+  const throttledHandleScroll = useRef<() => void>();
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [activeConversation?.messages]);
+    let timeoutId: NodeJS.Timeout;
+    throttledHandleScroll.current = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(handleScroll, 100);
+    };
+    return () => clearTimeout(timeoutId);
+  }, []);
+
+  // ChatGPT-style auto-scroll logic
+  useEffect(() => {
+    if (isStreaming) {
+      handleStreamingScroll();
+      checkAiMessagePosition();
+    } else if (isUserAtBottom) {
+      scrollToBottom(false);
+    }
+  }, [activeConversation?.messages, isStreaming, isUserAtBottom]);
+
+  // Force scroll to bottom when user sends a message
+  useEffect(() => {
+    if (
+      activeConversation?.messages &&
+      activeConversation.messages.length > 0
+    ) {
+      const lastMessage =
+        activeConversation.messages[activeConversation.messages.length - 1];
+      if (lastMessage?.role === 'user') {
+        setIsUserAtBottom(true);
+        setAiMessageAtTop(false);
+        setShowScrollButton(false);
+        scrollToBottom(true);
+      }
+    }
+  }, [activeConversation?.messages?.length, activeConversation]);
+
+  // Reset AI message position when streaming stops
+  useEffect(() => {
+    if (!isStreaming) {
+      setAiMessageAtTop(false);
+      setShowScrollButton(false);
+    }
+  }, [isStreaming]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Create initial conversation if none exists
   useEffect(() => {
@@ -263,14 +385,19 @@ const ChatInterface: React.FC = () => {
     return timestampDate.toLocaleDateString();
   };
 
-  const renderMessage = (msg: any) => {
+  const renderMessage = (msg: any, index: number, messages: any[]) => {
     if (!msg || !msg.id) {
       return null;
     }
 
+    // Check if this is the last AI message
+    const isLastAiMessage =
+      msg.role === 'assistant' && index === messages.length - 1;
+
     return (
       <Box
         key={msg.id}
+        ref={isLastAiMessage ? lastAiMessageRef : undefined}
         sx={{
           display: 'flex',
           alignItems: 'flex-start',
@@ -707,6 +834,8 @@ const ChatInterface: React.FC = () => {
 
         {/* Messages Area */}
         <Box
+          ref={messagesContainerRef}
+          onScroll={() => throttledHandleScroll.current?.()}
           sx={{
             flex: 1,
             overflow: 'auto',
@@ -769,11 +898,51 @@ const ChatInterface: React.FC = () => {
             </Box>
           ) : (
             <>
-              {activeConversation.messages.map(renderMessage)}
+              {activeConversation.messages.map((msg, index) =>
+                renderMessage(msg, index, activeConversation.messages)
+              )}
               <div ref={messagesEndRef} />
             </>
           )}
         </Box>
+
+        {/* ChatGPT-style Scroll to Bottom Button */}
+        {showScrollButton && (
+          <Box
+            sx={{
+              position: 'relative',
+              display: 'flex',
+              justifyContent: 'center',
+              py: 1,
+            }}
+          >
+            <IconButton
+              onClick={() => {
+                setIsUserAtBottom(true);
+                setAiMessageAtTop(false);
+                setShowScrollButton(false);
+                scrollToBottom(true); // Force smooth scroll to bottom
+              }}
+              sx={{
+                backgroundColor: 'primary.main',
+                color: 'white',
+                boxShadow: 2,
+                '&:hover': {
+                  backgroundColor: 'primary.dark',
+                  boxShadow: 3,
+                },
+                animation: 'pulse 2s infinite',
+                '@keyframes pulse': {
+                  '0%': { boxShadow: '0 0 0 0 rgba(25, 118, 210, 0.7)' },
+                  '70%': { boxShadow: '0 0 0 10px rgba(25, 118, 210, 0)' },
+                  '100%': { boxShadow: '0 0 0 0 rgba(25, 118, 210, 0)' },
+                },
+              }}
+            >
+              <ScrollDownIcon />
+            </IconButton>
+          </Box>
+        )}
 
         {/* Enhanced Input Area */}
         <Paper
